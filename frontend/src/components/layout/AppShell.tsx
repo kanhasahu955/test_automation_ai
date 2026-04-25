@@ -1,14 +1,13 @@
 import {
   AppstoreOutlined,
-  AuditOutlined,
   BarChartOutlined,
   BellOutlined,
   BookOutlined,
-  BugOutlined,
   CalendarOutlined,
   CloudServerOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  DownOutlined,
   ExperimentOutlined,
   FileSearchOutlined,
   LogoutOutlined,
@@ -16,7 +15,6 @@ import {
   NodeIndexOutlined,
   PartitionOutlined,
   PlayCircleOutlined,
-  ProjectOutlined,
   RobotOutlined,
   SettingOutlined,
   ThunderboltOutlined,
@@ -33,6 +31,8 @@ import { tokens } from "@theme/tokens";
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
+
+const SIDER_WIDTH = 272;
 
 type NavItem = { key: string; icon: ReactNode; label: string; group?: string };
 
@@ -55,9 +55,7 @@ const NAV: NavItem[] = [
   { key: ROUTES.DOCS, icon: <BookOutlined />, label: "Documentation", group: "Help" },
 ];
 
-/**
- * Build the AntD Menu items grouped by `NavItem.group`.
- */
+/** Build the AntD Menu items grouped by `NavItem.group`. */
 const buildMenuItems = (): MenuProps["items"] => {
   const groups = new Map<string, NavItem[]>();
   for (const item of NAV) {
@@ -71,7 +69,7 @@ const buildMenuItems = (): MenuProps["items"] => {
       type: "group",
       key: `grp-${group}`,
       label: (
-        <span style={{ fontSize: 11, letterSpacing: "0.12em", color: "rgba(226,232,240,0.45)" }}>
+        <span className="text-[11px] tracking-[0.12em] text-white/45">
           {group.toUpperCase()}
         </span>
       ),
@@ -95,10 +93,9 @@ export const AppShell = () => {
     return match?.key || ROUTES.DASHBOARD;
   }, [location.pathname]);
 
-  const activeLabel = useMemo(
-    () => NAV.find((n) => n.key === selectedKey)?.label || "QualityForge AI",
-    [selectedKey],
-  );
+  const activeNav = useMemo(() => NAV.find((n) => n.key === selectedKey), [selectedKey]);
+  const activeLabel = activeNav?.label || "QualityForge AI";
+  const activeIcon = activeNav?.icon ?? <DashboardOutlined />;
 
   const userMenu: MenuProps["items"] = [
     {
@@ -121,183 +118,175 @@ export const AppShell = () => {
   ];
 
   return (
-    <Layout style={{ minHeight: "100vh" }}>
+    <Layout className="min-h-screen" hasSider>
+      {/*
+        The Sider is `position: sticky` so it stays pinned while the inner
+        Layout scrolls. AntD's <Sider> exposes `style` only via the
+        `style` prop, so we set sticky positioning there and use Tailwind
+        for the inner layout (column flex with a scrollable menu region).
+      */}
       <Sider
-        width={272}
-        style={{
-          background: tokens.gradient.sidebar,
-          boxShadow: "4px 0 24px -8px rgba(15, 23, 42, 0.35)",
-          position: "relative",
-          overflow: "hidden",
-        }}
+        width={SIDER_WIDTH}
         breakpoint="lg"
         collapsedWidth={0}
+        className="!shadow-[4px_0_24px_-8px_rgba(15,23,42,0.35)]"
+        style={{
+          background: tokens.gradient.sidebar,
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          overflow: "hidden",
+        }}
       >
-        {/* Decorative glow blobs in the sidebar background. */}
+        {/* Animated brand glow blobs (kept as CSS — keyframe animation). */}
         <div
           aria-hidden
           className="qf-blob"
-          style={{
-            top: -60,
-            right: -40,
-            width: 220,
-            height: 220,
-            background: "rgba(99,102,241,0.55)",
-          }}
+          style={{ top: -60, right: -40, width: 220, height: 220, background: "rgba(99,102,241,0.55)" }}
         />
         <div
           aria-hidden
           className="qf-blob"
-          style={{
-            bottom: -80,
-            left: -60,
-            width: 240,
-            height: 240,
-            background: "rgba(6,182,212,0.45)",
-            animationDelay: "-6s",
-          }}
+          style={{ bottom: -80, left: -60, width: 240, height: 240, background: "rgba(6,182,212,0.45)", animationDelay: "-6s" }}
         />
 
-        <motion.div
-          initial={{ opacity: 0, x: -16 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, ease: tokens.motion.ease }}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "20px 20px 18px",
-            color: "#fff",
-            position: "relative",
-            zIndex: 1,
-          }}
-        >
+        <div className="relative z-[1] flex h-full flex-col">
+          {/* Brand block — pinned at top of sidebar. */}
           <motion.div
-            whileHover={{ scale: 1.06, rotate: 4 }}
-            transition={{ type: "spring", stiffness: 320, damping: 18 }}
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 12,
-              background: tokens.gradient.brand,
-              display: "grid",
-              placeItems: "center",
-              fontWeight: 700,
-              color: "#fff",
-              boxShadow: tokens.shadow.glow,
-            }}
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, ease: tokens.motion.ease }}
+            className="flex flex-none items-center gap-3 px-5 pt-5 pb-4 text-white"
           >
-            QF
+            <motion.div
+              whileHover={{ scale: 1.06, rotate: 4 }}
+              transition={{ type: "spring", stiffness: 320, damping: 18 }}
+              className="grid h-[42px] w-[42px] place-items-center rounded-xl font-bold text-white"
+              style={{ background: tokens.gradient.brand, boxShadow: tokens.shadow.glow }}
+            >
+              QF
+            </motion.div>
+            <div className="flex flex-col leading-tight">
+              <span className="text-[15px] font-semibold tracking-tight text-white">QualityForge AI</span>
+              <span className="text-[11px] text-white/60">Quality Engineering Platform</span>
+            </div>
           </motion.div>
-          <Space direction="vertical" size={0}>
-            <Text strong style={{ color: "#fff", fontSize: 15, letterSpacing: "-0.01em" }}>
-              QualityForge AI
-            </Text>
-            <Text style={{ color: "rgba(226,232,240,0.6)", fontSize: 11 }}>
-              Quality Engineering Platform
-            </Text>
-          </Space>
-        </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.4, delay: 0.15 }}
-          style={{ position: "relative", zIndex: 1 }}
-        >
-          <Menu
-            theme="dark"
-            mode="inline"
-            selectedKeys={[selectedKey]}
-            onClick={({ key }) => navigate(key)}
-            items={SHELL_MENU_ITEMS}
-            style={{ background: "transparent", borderInlineEnd: 0, padding: "4px 8px 24px" }}
-          />
-        </motion.div>
+          {/* Menu — scrolls internally when nav is taller than viewport. */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, delay: 0.15 }}
+            className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pb-6"
+          >
+            <Menu
+              theme="dark"
+              mode="inline"
+              selectedKeys={[selectedKey]}
+              onClick={({ key }) => navigate(key)}
+              items={SHELL_MENU_ITEMS}
+              style={{ background: "transparent", borderInlineEnd: 0 }}
+              className="!px-2 !pt-1"
+            />
+          </motion.div>
+        </div>
       </Sider>
 
       <Layout>
         <Header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 24px",
-            background: "rgba(255,255,255,0.78)",
-            backdropFilter: "blur(14px) saturate(140%)",
-            WebkitBackdropFilter: "blur(14px) saturate(140%)",
-            borderBottom: "1px solid rgba(226, 232, 240, 0.6)",
-            position: "sticky",
-            top: 0,
-            zIndex: 10,
-          }}
+          className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200/60 bg-white/80 px-6 backdrop-blur-md backdrop-saturate-150"
+          style={{ height: 64, lineHeight: "64px" }}
         >
-          <Space size={12}>
-            <motion.span
-              key={selectedKey}
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25 }}
-              style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
+          {/* Active page badge + label. */}
+          <motion.div
+            key={selectedKey}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+            className="inline-flex min-w-0 flex-shrink items-center gap-2.5"
+          >
+            <span
+              aria-hidden
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-base text-primary"
+              style={{ background: tokens.gradient.brandSoft }}
             >
-              <BugOutlined style={{ color: tokens.color.primary }} />
-              <Text strong style={{ fontSize: 16, letterSpacing: "-0.01em" }}>
-                {activeLabel}
-              </Text>
-            </motion.span>
-          </Space>
-          <Space size={20}>
+              {activeIcon}
+            </span>
+            <Text strong className="!truncate !text-base !leading-tight !tracking-tight">
+              {activeLabel}
+            </Text>
+          </motion.div>
+
+          {/* Right cluster — quick links + user pill. */}
+          <div className="inline-flex flex-none items-center gap-2">
             <Tooltip title="Documentation">
-              <BookOutlined
-                className="qf-focusable"
-                style={{ fontSize: 18, cursor: "pointer", color: tokens.color.textMuted }}
+              <button
+                type="button"
+                aria-label="Documentation"
                 onClick={() => navigate(ROUTES.DOCS)}
-              />
+                className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border-0 bg-transparent text-slate-600 transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                <BookOutlined style={{ fontSize: 18 }} />
+              </button>
             </Tooltip>
+
             <Tooltip title="Notifications">
-              <Badge count={0} size="small">
-                <BellOutlined
-                  className="qf-focusable"
-                  style={{ fontSize: 18, cursor: "pointer", color: tokens.color.textMuted }}
-                  onClick={() => navigate(ROUTES.NOTIFICATIONS)}
-                />
-              </Badge>
+              <button
+                type="button"
+                aria-label="Notifications"
+                onClick={() => navigate(ROUTES.NOTIFICATIONS)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border-0 bg-transparent text-slate-600 transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                <Badge count={0} size="small" offset={[-2, 2]}>
+                  <BellOutlined style={{ fontSize: 18 }} />
+                </Badge>
+              </button>
             </Tooltip>
-            <Tooltip title="Projects">
-              <ProjectOutlined
-                className="qf-focusable"
-                style={{ fontSize: 18, cursor: "pointer", color: tokens.color.textMuted }}
-                onClick={() => navigate(ROUTES.PROJECTS)}
-              />
+
+            <Tooltip title="Settings">
+              <button
+                type="button"
+                aria-label="Settings"
+                onClick={() => navigate(ROUTES.SETTINGS)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border-0 bg-transparent text-slate-600 transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                <SettingOutlined style={{ fontSize: 18 }} />
+              </button>
             </Tooltip>
-            <Tooltip title="Audit logs">
-              <AuditOutlined
-                className="qf-focusable"
-                style={{ fontSize: 18, cursor: "pointer", color: tokens.color.textMuted }}
-                onClick={() => navigate(ROUTES.AUDIT_LOGS)}
-              />
-            </Tooltip>
-            <Dropdown menu={{ items: userMenu }} trigger={["click"]}>
-              <Space style={{ cursor: "pointer" }}>
-                <Avatar style={{ background: tokens.gradient.brand, color: "#fff", fontWeight: 600 }}>
+
+            <span aria-hidden className="mx-1 h-6 w-px bg-slate-900/10" />
+
+            <Dropdown menu={{ items: userMenu }} trigger={["click"]} placement="bottomRight">
+              <button
+                type="button"
+                aria-label="Account menu"
+                className="inline-flex max-w-[240px] items-center gap-2.5 rounded-full border border-primary/15 bg-primary/5 py-1 pl-1 pr-3.5 transition-colors duration-150 hover:border-primary/30 hover:bg-primary/10"
+              >
+                <Avatar
+                  size={32}
+                  style={{ background: tokens.gradient.brand, color: "#fff", fontWeight: 600, flex: "0 0 auto" }}
+                >
                   {user?.name?.[0]?.toUpperCase() || "U"}
                 </Avatar>
-                <Space direction="vertical" size={0}>
-                  <Text strong style={{ lineHeight: 1.1, fontSize: 13 }}>
-                    {user?.name}
-                  </Text>
-                  <Text type="secondary" style={{ fontSize: 11 }}>
-                    {user?.role}
-                  </Text>
-                </Space>
-              </Space>
+                <span className="hidden min-w-0 flex-col leading-[1.15] sm:flex">
+                  <span className="max-w-[140px] truncate text-[13px] font-semibold text-slate-900">
+                    {user?.name || "Account"}
+                  </span>
+                  {user?.role && (
+                    <span className="max-w-[140px] truncate text-[10.5px] uppercase tracking-wider text-slate-600">
+                      {user.role}
+                    </span>
+                  )}
+                </span>
+                <DownOutlined style={{ fontSize: 10, color: tokens.color.textMuted }} />
+              </button>
             </Dropdown>
-          </Space>
+          </div>
         </Header>
 
         <Content
+          className="p-6"
           style={{
-            padding: 24,
             background: tokens.color.bg,
             backgroundImage: tokens.gradient.aurora,
             backgroundAttachment: "fixed",
@@ -310,10 +299,7 @@ export const AppShell = () => {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{
-                duration: tokens.motion.duration.base,
-                ease: tokens.motion.ease,
-              }}
+              transition={{ duration: tokens.motion.duration.base, ease: tokens.motion.ease }}
             >
               <Outlet />
             </motion.div>

@@ -2,7 +2,6 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
-import "antd/dist/reset.css";
 import "@xyflow/react/dist/style.css";
 import "./index.css";
 

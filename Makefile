@@ -76,30 +76,87 @@ use-docker-env: ## Activate compose-mode env (DB_HOST=mysql, redis://redis…)
 	@printf "  DB_HOST=mysql / REDIS_URL=redis://redis:6379/0\n"
 	@printf "  Run:  $(BLUE)make up$(RESET)\n"
 
-use-host-env: ## Activate host-mode env (DB on 127.0.0.1:3307, redis on :6379)
+use-host-env: ## Activate host-mode env (your local MySQL on :3306, redis on :6379)
 	@cp $(BACKEND_DIR)/.env.host $(BACKEND_DIR)/.env
 	@printf "$(GREEN)✓ backend/.env now points at host services$(RESET)\n"
-	@printf "  DB_HOST=127.0.0.1:3307 / REDIS_URL=redis://127.0.0.1:6379/0\n"
-	@printf "  Bring infra up:   $(BLUE)make infra-up$(RESET)\n"
-	@printf "  Then in tabs:     $(BLUE)make api$(RESET) | $(BLUE)make worker$(RESET) | $(BLUE)make beat$(RESET) | $(BLUE)make web$(RESET)\n"
+	@printf "  DB:    127.0.0.1:3306  (your locally-installed MySQL)\n"
+	@printf "  Redis: redis://127.0.0.1:6379/0\n"
+	@printf "\n  First-time setup:  $(BLUE)make db-create-local && make db-init$(RESET)\n"
+	@printf "  Then in tabs:      $(BLUE)make api$(RESET) | $(BLUE)make worker$(RESET) | $(BLUE)make beat$(RESET) | $(BLUE)make web$(RESET)\n"
 
-which-env: ## Show which mode the current backend/.env is configured for
-	@grep -E '^DB_HOST=' $(BACKEND_DIR)/.env | sed 's/^/  /'
-	@grep -E '^REDIS_URL=' $(BACKEND_DIR)/.env | sed 's/^/  /'
+which-env: ## Show which DB/Redis the current backend/.env points at
+	@printf "$(BOLD)backend/.env$(RESET)\n"
+	@grep -E '^(DB_HOST|DB_PORT|DB_USER|DB_NAME|REDIS_URL)=' $(BACKEND_DIR)/.env | sed 's/^/  /'
+	@host="$$(grep -E '^DB_HOST=' $(BACKEND_DIR)/.env | cut -d= -f2)"; \
+	port="$$(grep -E '^DB_PORT=' $(BACKEND_DIR)/.env | cut -d= -f2)"; \
+	if [ "$$host" = "mysql" ]; then \
+		printf "  $(GREEN)mode: DOCKER$(RESET) (compose service name)\n"; \
+	elif [ "$$port" = "3306" ]; then \
+		printf "  $(GREEN)mode: HOST$(RESET) (your locally-installed MySQL)\n"; \
+	elif [ "$$port" = "3307" ]; then \
+		printf "  $(GREEN)mode: HOST→DOCKER$(RESET) (host process talking to compose mysql)\n"; \
+	else \
+		printf "  $(YELLOW)mode: CUSTOM$(RESET)\n"; \
+	fi
 
 # -- Lightweight infra-only stack (host-mode dev companion) ------------------
 .PHONY: infra-up infra-down
-infra-up: ## Run only mysql + redis containers (for host-mode dev)
+infra-up: ## Run only mysql + redis containers (compose mysql exposed on :3307)
 	$(COMPOSE) up -d mysql redis
-	@printf "$(GREEN)✓ MySQL on 127.0.0.1:3307 / Redis on 127.0.0.1:6379$(RESET)\n"
+	@printf "$(GREEN)✓ Compose MySQL on 127.0.0.1:3307 / Redis on 127.0.0.1:6379$(RESET)\n"
+	@printf "  Note: this is the *dockerized* MySQL on port 3307. To use this from\n"
+	@printf "  host mode, set DB_PORT=3307 in backend/.env.host before make api.\n"
 
 infra-down: ## Stop the infra-only stack
 	$(COMPOSE) stop mysql redis
 
+# -- Local MySQL bootstrap (host mode) ---------------------------------------
+.PHONY: db-create-local db-init db-ping
+MYSQL_LOCAL_HOST          ?= 127.0.0.1
+MYSQL_LOCAL_PORT          ?= 3306
+MYSQL_LOCAL_ROOT_USER     ?= root
+MYSQL_LOCAL_ROOT_PASSWORD ?=
+
+db-create-local: ## Create qualityforge DB + qfuser in your locally-installed MySQL
+	@if ! command -v mysql >/dev/null 2>&1; then \
+		printf "$(RED)mysql CLI not found.$(RESET) Install MySQL first:\n"; \
+		printf "  brew install mysql && brew services start mysql\n"; \
+		exit 1; \
+	fi
+	@printf "$(BLUE)→ Running backend/sql/init/01_create_database.sql against $(MYSQL_LOCAL_HOST):$(MYSQL_LOCAL_PORT) as $(MYSQL_LOCAL_ROOT_USER)$(RESET)\n"
+	@if [ -z "$(MYSQL_LOCAL_ROOT_PASSWORD)" ]; then \
+		mysql -h $(MYSQL_LOCAL_HOST) -P $(MYSQL_LOCAL_PORT) -u $(MYSQL_LOCAL_ROOT_USER) < $(BACKEND_DIR)/sql/init/01_create_database.sql; \
+	else \
+		mysql -h $(MYSQL_LOCAL_HOST) -P $(MYSQL_LOCAL_PORT) -u $(MYSQL_LOCAL_ROOT_USER) -p$(MYSQL_LOCAL_ROOT_PASSWORD) < $(BACKEND_DIR)/sql/init/01_create_database.sql; \
+	fi
+	@printf "$(GREEN)✓ qualityforge DB + qfuser ready$(RESET)\n"
+	@printf "  Next:  $(BLUE)make db-init$(RESET)  (creates tables + admin user)\n"
+
+db-init: ## Create tables in the active DB (works for host AND docker modes)
+	@if [ -d $(BACKEND_DIR)/.venv ]; then \
+		cd $(BACKEND_DIR) && uv run python -m scripts.db_bootstrap init; \
+	elif $(COMPOSE) ps backend 2>/dev/null | grep -q "Up"; then \
+		$(COMPOSE) exec backend python -m scripts.db_bootstrap init; \
+	else \
+		printf "$(RED)No backend venv and no running backend container.$(RESET)\n"; \
+		printf "  Run:  $(BLUE)make backend-install$(RESET)  or  $(BLUE)make up$(RESET)\n"; \
+		exit 1; \
+	fi
+
+db-ping: ## Ping the active DB and report mode + version + table count
+	@if [ -d $(BACKEND_DIR)/.venv ]; then \
+		cd $(BACKEND_DIR) && uv run python -m scripts.db_bootstrap ping; \
+	elif $(COMPOSE) ps backend 2>/dev/null | grep -q "Up"; then \
+		$(COMPOSE) exec backend python -m scripts.db_bootstrap ping; \
+	else \
+		printf "$(RED)No backend venv and no running backend container.$(RESET)\n"; \
+		exit 1; \
+	fi
+
 # =============================================================================
 # ── Backend (uv) ──
 # =============================================================================
-.PHONY: backend-install backend api worker beat backend-test backend-lint backend-format backend-typecheck backend-shell backend-add backend-add-dev backend-remove backend-update backend-outdated
+.PHONY: backend-install backend api worker beat flower celery-status backend-test backend-lint backend-format backend-typecheck backend-shell backend-add backend-add-dev backend-remove backend-update backend-outdated
 
 backend-install: ## Install backend deps from uv.lock (frozen)
 	cd $(BACKEND_DIR) && uv sync --frozen
@@ -114,8 +171,33 @@ worker: ## Run Celery worker (all queues)
 beat: ## Run Celery beat scheduler (RedBeat — dynamic schedules)
 	cd $(BACKEND_DIR) && uv run celery -A app.core.celery_app.celery_app beat --scheduler redbeat.RedBeatScheduler -l info
 
-flower: ## Run Flower (Celery monitoring UI on :5555)
+flower: ## Run Flower (Celery monitoring UI on :5555) — host mode
+	@broker="$$(grep -E '^CELERY_BROKER_URL=' $(BACKEND_DIR)/.env | cut -d= -f2-)"; \
+	if [ -z "$$broker" ]; then broker="redis://127.0.0.1:6379/1"; fi; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^qf_flower$$'; then \
+		printf "$(RED)✗ docker container qf_flower is already on :5555$(RESET)\n"; \
+		printf "  Stop it first:  $(BLUE)make ops-down$(RESET)\n"; \
+		printf "  (Otherwise the browser will keep showing the docker Flower,\n"; \
+		printf "   which talks to the docker-network Redis — not the host one\n"; \
+		printf "   your worker is registered with, so workers look 'Offline'.)\n"; \
+		exit 1; \
+	fi; \
+	printf "$(GREEN)→ Flower (host)$(RESET)\n"; \
+	printf "  broker : $$broker\n"; \
+	printf "  ui     : http://localhost:5555\n\n"; \
 	cd $(BACKEND_DIR) && uv run celery -A app.core.celery_app.celery_app flower --port=5555 --address=0.0.0.0
+
+celery-status: ## Ping the celery worker against the active .env broker
+	@broker="$$(grep -E '^CELERY_BROKER_URL=' $(BACKEND_DIR)/.env | cut -d= -f2-)"; \
+	printf "$(BOLD)Celery status$(RESET)\n"; \
+	printf "  broker (active .env) : %s\n" "$$broker"; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^qf_flower$$'; then \
+		printf "  $(YELLOW)docker qf_flower is running$(RESET) — it monitors the docker-network Redis\n"; \
+		printf "  open http://localhost:5555 only when the docker stack is up (make up)\n"; \
+	fi; \
+	printf "\n→ inspect ping (10s timeout)\n"; \
+	cd $(BACKEND_DIR) && uv run celery -A app.core.celery_app.celery_app inspect ping --timeout=10 || \
+		(printf "\n$(RED)No worker responded.$(RESET)  Is $(BLUE)make worker$(RESET) running with this same broker?\n" && exit 1)
 
 backend-test: ## Run backend tests (pytest)
 	cd $(BACKEND_DIR) && uv run pytest
@@ -257,6 +339,13 @@ ops-up: ## Start Flower + Redis Commander (compose profile=ops)
 	$(COMPOSE) --profile ops up -d flower redis-commander
 	@printf "$(GREEN)Flower:$(RESET)         http://localhost:5555\n"
 	@printf "$(GREEN)Redis Commander:$(RESET) http://localhost:8081 (user/pass: admin/admin)\n"
+	@if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^qf_redis$$'; then \
+		printf "\n$(YELLOW)⚠ qf_redis container is not running.$(RESET)\n"; \
+		printf "  Docker Flower talks to redis://redis:6379/1 (docker network only) —\n"; \
+		printf "  it will show $(BOLD)0 workers / Offline$(RESET) until you also run $(BLUE)make up$(RESET).\n"; \
+		printf "  If you're running celery on the host instead, stop these dashboards\n"; \
+		printf "  ($(BLUE)make ops-down$(RESET)) and use $(BLUE)make flower$(RESET) on the host.\n"; \
+	fi
 
 ops-down: ## Stop the optional ops stack
 	$(COMPOSE) --profile ops stop flower redis-commander
