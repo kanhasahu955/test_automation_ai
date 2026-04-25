@@ -1,0 +1,1377 @@
+{
+  "info": {
+    "_postman_id": "qf-ai-collection-001",
+    "name": "QualityForge AI",
+    "description": "Complete REST surface for QualityForge AI (prefix /api/v1).\n\nUsage:\n1. Import the companion environment file `qualityforge-ai.postman_environment.json`.\n2. Run **Auth → Login (JSON)** — the `accessToken`, `refreshToken`, and `userId` are auto-populated by the test script.\n3. Other requests inherit Bearer auth from the collection.\n\nVariables: `baseUrl`, `accessToken`, `refreshToken`, `userId`, `projectId`, `environmentId`, `dataSourceId`, `testCaseId`, `suiteId`, `flowId`, `runId`, `stmDocumentId`, `stmMappingId`, `qualityRuleId`, `metadataTableId`, `sqlTestId`, `profilingRunId`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{accessToken}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "projectId", "value": "" },
+    { "key": "environmentId", "value": "" },
+    { "key": "dataSourceId", "value": "" },
+    { "key": "testCaseId", "value": "" },
+    { "key": "suiteId", "value": "" },
+    { "key": "flowId", "value": "" },
+    { "key": "runId", "value": "" },
+    { "key": "stmDocumentId", "value": "" },
+    { "key": "stmMappingId", "value": "" },
+    { "key": "qualityRuleId", "value": "" },
+    { "key": "metadataTableId", "value": "" },
+    { "key": "sqlTestId", "value": "" },
+    { "key": "profilingRunId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Version",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/version", "host": ["{{baseUrl}}"], "path": ["version"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane QA\",\n  \"email\": \"jane@qualityforge.ai\",\n  \"password\": \"Jane@12345\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Login (OAuth2 form)",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "admin@qualityforge.ai" },
+                { "key": "password", "value": "Admin@12345" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login (JSON) [auto-saves tokens]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.access_token) pm.collectionVariables.set('accessToken', data.access_token);",
+                  "  if (data.refresh_token) pm.collectionVariables.set('refreshToken', data.refresh_token);",
+                  "  if (data.user && data.user.id) pm.collectionVariables.set('userId', data.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@qualityforge.ai\",\n  \"password\": \"Admin@12345\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login-json", "host": ["{{baseUrl}}"], "path": ["auth", "login-json"] }
+          }
+        },
+        {
+          "name": "Refresh token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.access_token) pm.collectionVariables.set('accessToken', data.access_token);",
+                  "  if (data.refresh_token) pm.collectionVariables.set('refreshToken', data.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/refresh-token", "host": ["{{baseUrl}}"], "path": ["auth", "refresh-token"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (admin)",
+      "item": [
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users?page=1&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "size", "value": "20" },
+                { "key": "search", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mark Engineer\",\n  \"email\": \"mark@qualityforge.ai\",\n  \"password\": \"Mark@12345\",\n  \"role\": \"QA_ENGINEER\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] }
+          }
+        },
+        {
+          "name": "Get user",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update user / role",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"QA_MANAGER\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete user",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "Create project [auto-saves projectId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('projectId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Project\",\n  \"description\": \"Created via Postman\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/projects", "host": ["{{baseUrl}}"], "path": ["projects"] }
+          }
+        },
+        {
+          "name": "List projects",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects?page=1&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "size", "value": "20" },
+                { "key": "search", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get project",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update project",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Project (renamed)\",\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete project",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environments",
+      "item": [
+        {
+          "name": "Create environment [auto-saves envId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('environmentId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"staging\",\n  \"base_url\": \"https://staging.example.com\",\n  \"variables\": {\"region\": \"in\"}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/environments",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "environments"]
+            }
+          }
+        },
+        {
+          "name": "List environments",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/environments",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "environments"]
+            }
+          }
+        },
+        {
+          "name": "Get environment",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/environments/{{environmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["environments", "{{environmentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update environment",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"base_url\": \"https://staging-2.example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/environments/{{environmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["environments", "{{environmentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete environment",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/environments/{{environmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["environments", "{{environmentId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Cases",
+      "item": [
+        {
+          "name": "Create test case [auto-saves testCaseId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('testCaseId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Login with valid credentials\",\n  \"description\": \"User should be redirected to dashboard\",\n  \"test_type\": \"UI\",\n  \"priority\": \"HIGH\",\n  \"status\": \"DRAFT\",\n  \"preconditions\": \"User has account\",\n  \"expected_result\": \"Dashboard visible\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/test-cases",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "test-cases"]
+            }
+          }
+        },
+        {
+          "name": "List test cases",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/test-cases?page=1&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "test-cases"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "size", "value": "20" },
+                { "key": "search", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get test case",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/test-cases/{{testCaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-cases", "{{testCaseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update test case",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"READY\",\n  \"priority\": \"CRITICAL\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/test-cases/{{testCaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-cases", "{{testCaseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete test case",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/test-cases/{{testCaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-cases", "{{testCaseId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Suites",
+      "item": [
+        {
+          "name": "Create suite [auto-saves suiteId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('suiteId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Smoke Suite\",\n  \"description\": \"Critical paths\",\n  \"suite_type\": \"SMOKE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/test-suites",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "test-suites"]
+            }
+          }
+        },
+        {
+          "name": "List suites",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/test-suites",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "test-suites"]
+            }
+          }
+        },
+        {
+          "name": "Get suite",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/test-suites/{{suiteId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-suites", "{{suiteId}}"]
+            }
+          }
+        },
+        {
+          "name": "Add case to suite",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"test_case_id\": \"{{testCaseId}}\",\n  \"execution_order\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/test-suites/{{suiteId}}/cases",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-suites", "{{suiteId}}", "cases"]
+            }
+          }
+        },
+        {
+          "name": "List cases in suite",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/test-suites/{{suiteId}}/cases",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-suites", "{{suiteId}}", "cases"]
+            }
+          }
+        },
+        {
+          "name": "Run suite [auto-saves runId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('runId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"environment_id\": \"{{environmentId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/test-suites/{{suiteId}}/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-suites", "{{suiteId}}", "run"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "No-Code Flows",
+      "item": [
+        {
+          "name": "Create flow [auto-saves flowId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('flowId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"login_smoke\",\n  \"runtime\": \"PLAYWRIGHT\",\n  \"flow_json\": {\n    \"flow_name\": \"login_smoke\",\n    \"runtime\": \"PLAYWRIGHT\",\n    \"steps\": [\n      {\"id\": \"s1\", \"type\": \"open_page\", \"config\": {\"url\": \"https://app.example.com/login\"}},\n      {\"id\": \"s2\", \"type\": \"input\", \"config\": {\"selector\": \"#email\", \"value\": \"a@b.com\"}},\n      {\"id\": \"s3\", \"type\": \"input\", \"config\": {\"selector\": \"#password\", \"value\": \"***\"}},\n      {\"id\": \"s4\", \"type\": \"click\", \"config\": {\"selector\": \"button[type=submit]\"}},\n      {\"id\": \"s5\", \"type\": \"assert_visible\", \"config\": {\"selector\": \".dashboard\"}}\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/flows",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "flows"]
+            }
+          }
+        },
+        {
+          "name": "List flows",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/flows",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "flows"]
+            }
+          }
+        },
+        {
+          "name": "Get flow",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/flows/{{flowId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["flows", "{{flowId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update flow",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"login_smoke_v2\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/flows/{{flowId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["flows", "{{flowId}}"]
+            }
+          }
+        },
+        {
+          "name": "Compile flow",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/flows/{{flowId}}/compile",
+              "host": ["{{baseUrl}}"],
+              "path": ["flows", "{{flowId}}", "compile"]
+            }
+          }
+        },
+        {
+          "name": "Run flow [auto-saves runId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('runId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/flows/{{flowId}}/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["flows", "{{flowId}}", "run"]
+            }
+          }
+        },
+        {
+          "name": "Delete flow",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/flows/{{flowId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["flows", "{{flowId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Executions",
+      "item": [
+        {
+          "name": "List execution runs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/execution-runs?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "execution-runs"],
+              "query": [{ "key": "limit", "value": "50" }]
+            }
+          }
+        },
+        {
+          "name": "Run report",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/execution-runs/{{runId}}/report",
+              "host": ["{{baseUrl}}"],
+              "path": ["execution-runs", "{{runId}}", "report"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Studio",
+      "item": [
+        {
+          "name": "Generate test cases",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"Users should be able to reset their password via email link.\",\n  \"count\": 6,\n  \"project_id\": \"{{projectId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/generate-test-cases",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "generate-test-cases"]
+            }
+          }
+        },
+        {
+          "name": "Generate no-code flow",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scenario\": \"Login then add an item to cart and verify total updates\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/generate-no-code-flow",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "generate-no-code-flow"]
+            }
+          }
+        },
+        {
+          "name": "Generate SQL validation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_id\": \"{{projectId}}\",\n  \"mapping_json\": {\n    \"source_table\": \"orders_src\",\n    \"source_column\": \"amount\",\n    \"target_table\": \"orders_tgt\",\n    \"target_column\": \"amount_usd\",\n    \"join_key\": \"order_id\",\n    \"transformation_rule\": \"s.amount * 1.0\",\n    \"validation_type\": \"TRANSFORMATION_CHECK\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/generate-sql-validation",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "generate-sql-validation"]
+            }
+          }
+        },
+        {
+          "name": "Analyze failure",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"test_name\": \"login_smoke\",\n  \"error_message\": \"TimeoutError: locator '.dashboard' did not appear in 30000ms\",\n  \"logs\": \"[INFO] page.goto OK\\n[INFO] click submit OK\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/analyze-failure",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "analyze-failure"]
+            }
+          }
+        },
+        {
+          "name": "Suggest edge cases",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"Search by city should support pagination and filters.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/suggest-edge-cases",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "suggest-edge-cases"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "STM Converter",
+      "item": [
+        {
+          "name": "Upload STM document [auto-saves stmDocumentId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('stmDocumentId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": [], "description": "Select an .xlsx STM mapping file" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/stm/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "stm", "upload"]
+            }
+          }
+        },
+        {
+          "name": "List STM documents",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/stm/documents",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "stm", "documents"]
+            }
+          }
+        },
+        {
+          "name": "List mappings of document",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/stm/{{stmDocumentId}}/mappings",
+              "host": ["{{baseUrl}}"],
+              "path": ["stm", "{{stmDocumentId}}", "mappings"]
+            }
+          }
+        },
+        {
+          "name": "Generate SQL for document",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"use_ai\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/stm/{{stmDocumentId}}/generate-sql",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "stm", "{{stmDocumentId}}", "generate-sql"]
+            }
+          }
+        },
+        {
+          "name": "Run STM validation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data_source_id\": \"{{dataSourceId}}\",\n  \"allow_destructive\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stm/{{stmDocumentId}}/run-validation",
+              "host": ["{{baseUrl}}"],
+              "path": ["stm", "{{stmDocumentId}}", "run-validation"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SQL Tests",
+      "item": [
+        {
+          "name": "Create SQL test [auto-saves sqlTestId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('sqlTestId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"orders_tgt.amount_usd validation\",\n  \"sql_query\": \"SELECT s.order_id, s.amount AS expected, t.amount_usd AS actual FROM orders_src s JOIN orders_tgt t ON s.order_id = t.order_id WHERE s.amount <> t.amount_usd;\",\n  \"expected_result_type\": \"ZERO_ROWS\",\n  \"created_by_ai\": false,\n  \"stm_mapping_id\": \"{{stmMappingId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/sql-tests",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "sql-tests"]
+            }
+          }
+        },
+        {
+          "name": "List SQL tests",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/sql-tests",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "sql-tests"]
+            }
+          }
+        },
+        {
+          "name": "Get SQL test",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sql-tests/{{sqlTestId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["sql-tests", "{{sqlTestId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update SQL test",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_result_type\": \"THRESHOLD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/sql-tests/{{sqlTestId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["sql-tests", "{{sqlTestId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete SQL test",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/sql-tests/{{sqlTestId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["sql-tests", "{{sqlTestId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data Sources",
+      "item": [
+        {
+          "name": "Create data source [auto-saves dataSourceId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('dataSourceId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"warehouse_pg\",\n  \"source_type\": \"POSTGRESQL\",\n  \"host\": \"warehouse.example.com\",\n  \"port\": 5432,\n  \"database_name\": \"analytics\",\n  \"username\": \"reader\",\n  \"password\": \"secret-from-vault\",\n  \"extra_config\": {\"sslmode\": \"require\"}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/data-sources",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "data-sources"]
+            }
+          }
+        },
+        {
+          "name": "List data sources",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/data-sources",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "data-sources"]
+            }
+          }
+        },
+        {
+          "name": "Get data source",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/data-sources/{{dataSourceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["data-sources", "{{dataSourceId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update data source",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/data-sources/{{dataSourceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["data-sources", "{{dataSourceId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete data source",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/data-sources/{{dataSourceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["data-sources", "{{dataSourceId}}"]
+            }
+          }
+        },
+        {
+          "name": "Test connection",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/data-sources/{{dataSourceId}}/test-connection",
+              "host": ["{{baseUrl}}"],
+              "path": ["data-sources", "{{dataSourceId}}", "test-connection"]
+            }
+          }
+        },
+        {
+          "name": "Scan metadata",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/data-sources/{{dataSourceId}}/scan-metadata",
+              "host": ["{{baseUrl}}"],
+              "path": ["data-sources", "{{dataSourceId}}", "scan-metadata"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Metadata",
+      "item": [
+        {
+          "name": "List metadata tables",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/data-sources/{{dataSourceId}}/metadata/tables",
+              "host": ["{{baseUrl}}"],
+              "path": ["data-sources", "{{dataSourceId}}", "metadata", "tables"]
+            }
+          }
+        },
+        {
+          "name": "List columns of table",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/metadata/tables/{{metadataTableId}}/columns",
+              "host": ["{{baseUrl}}"],
+              "path": ["metadata", "tables", "{{metadataTableId}}", "columns"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data Profiling",
+      "item": [
+        {
+          "name": "Trigger profile [auto-saves profilingRunId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('profilingRunId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/data-sources/{{dataSourceId}}/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["data-sources", "{{dataSourceId}}", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Get profiling run",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/profiling-runs/{{profilingRunId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["profiling-runs", "{{profilingRunId}}"]
+            }
+          }
+        },
+        {
+          "name": "List profiling runs (project)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/profiling-runs",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "profiling-runs"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quality Rules",
+      "item": [
+        {
+          "name": "Create rule [auto-saves qualityRuleId]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('qualityRuleId', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"customer.email NOT NULL\",\n  \"rule_type\": \"NOT_NULL\",\n  \"table_name\": \"customer\",\n  \"column_name\": \"email\",\n  \"severity\": \"HIGH\",\n  \"rule_config\": {}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/quality-rules",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "quality-rules"]
+            }
+          }
+        },
+        {
+          "name": "List rules",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/quality-rules",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "quality-rules"]
+            }
+          }
+        },
+        {
+          "name": "Get rule",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/quality-rules/{{qualityRuleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["quality-rules", "{{qualityRuleId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update rule",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"severity\": \"CRITICAL\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quality-rules/{{qualityRuleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["quality-rules", "{{qualityRuleId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete rule",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/quality-rules/{{qualityRuleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["quality-rules", "{{qualityRuleId}}"]
+            }
+          }
+        },
+        {
+          "name": "List rule results",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/quality-rules/{{qualityRuleId}}/results",
+              "host": ["{{baseUrl}}"],
+              "path": ["quality-rules", "{{qualityRuleId}}", "results"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Project dashboard",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "dashboard"]
+            }
+          }
+        },
+        {
+          "name": "Quality score",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/quality-score",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "quality-score"]
+            }
+          }
+        },
+        {
+          "name": "Trend report",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/trend-report?days=14",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "trend-report"],
+              "query": [{ "key": "days", "value": "14" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications (admin)",
+      "item": [
+        {
+          "name": "Create notification",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_id\": \"{{projectId}}\",\n  \"channel\": \"SLACK\",\n  \"recipient\": \"#qe-alerts\",\n  \"event_type\": \"RUN_FAILED\",\n  \"message\": \"Test run failed\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/notifications", "host": ["{{baseUrl}}"], "path": ["notifications"] }
+          }
+        },
+        {
+          "name": "List notifications",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/notifications?limit=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications"],
+              "query": [
+                { "key": "project_id", "value": "{{projectId}}", "disabled": true },
+                { "key": "limit", "value": "100" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs (admin)",
+      "item": [
+        {
+          "name": "List audit logs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs?limit=200",
+              "host": ["{{baseUrl}}"],
+              "path": ["audit-logs"],
+              "query": [{ "key": "limit", "value": "200" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

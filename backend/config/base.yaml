@@ -1,0 +1,68 @@
+# =============================================================================
+# QualityForge AI - Base configuration (non-secret defaults).
+# -----------------------------------------------------------------------------
+# Layered config loading order (later overrides earlier):
+#   1. Defaults declared on Settings class (app/core/config.py)
+#   2. config/base.yaml                       (this file)
+#   3. config/{APP_ENV}.yaml                  (development.yaml | staging.yaml | production.yaml)
+#   4. backend/.env                           (secrets, host-specific knobs)
+#   5. process environment variables          (highest precedence)
+#
+# Keep secrets OUT of YAML. Use .env or your secret manager (AWS SSM, Vault…).
+# =============================================================================
+
+app:
+  name: "QualityForge AI"
+  env: "development"
+  debug: true
+  host: "0.0.0.0"
+  port: 8000
+  api_prefix: "/api/v1"
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:5173"
+    - "http://localhost:8080"
+
+security:
+  jwt_algorithm: "HS256"
+  access_token_expires_minutes: 60
+  refresh_token_expires_days: 14
+
+database:
+  pool_size: 10
+  max_overflow: 20
+  connect_timeout_s: 10
+
+redis:
+  url: "redis://redis:6379/0"
+
+celery:
+  broker_url: "redis://redis:6379/1"
+  result_backend: "redis://redis:6379/2"
+  worker_queues:
+    - "execution"
+    - "ai"
+    - "stm"
+    - "profiling"
+    - "metadata"
+    - "default"
+
+storage:
+  artifacts_dir: "/var/qf/artifacts"
+  uploads_dir: "/var/qf/uploads"
+
+ai:
+  enabled: true
+  model: "gpt-4o-mini"
+  base_url: "https://api.openai.com/v1"
+
+worker:
+  metadata_max_tables: 100
+  profiling_max_tables: 50
+  profiling_sample_size: 1000
+  report_recent_runs_limit: 50
+  stm_validation_fetch: 50
+
+bootstrap:
+  admin_email: "admin@qualityforge.ai"
+  admin_name: "Platform Admin"

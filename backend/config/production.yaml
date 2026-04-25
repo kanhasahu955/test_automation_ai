@@ -1,0 +1,14 @@
+app:
+  debug: false
+
+database:
+  pool_size: 30
+  max_overflow: 50
+  connect_timeout_s: 15
+
+worker:
+  metadata_max_tables: 500
+  profiling_max_tables: 200
+  profiling_sample_size: 5000
+  report_recent_runs_limit: 100
+  stm_validation_fetch: 200

@@ -1,0 +1,259 @@
+/* ----------------------------------------------------------------
+   QualityForge AI — Global styles
+   Design tokens live in src/theme/tokens.ts. The CSS variables here
+   mirror that file so we can use them in plain CSS where useful.
+---------------------------------------------------------------- */
+
+:root {
+  --qf-color-primary: #6366f1;
+  --qf-color-accent: #06b6d4;
+  --qf-color-violet: #8b5cf6;
+  --qf-color-pink: #ec4899;
+  --qf-color-bg: #f6f7fb;
+  --qf-color-surface: #ffffff;
+  --qf-color-border: #e5e7eb;
+  --qf-color-text: #0f172a;
+  --qf-color-text-muted: #475569;
+
+  --qf-shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --qf-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
+  --qf-shadow-lg: 0 24px 48px -12px rgba(15, 23, 42, 0.18);
+  --qf-shadow-glow: 0 10px 30px -10px rgba(99, 102, 241, 0.45);
+
+  --qf-gradient-brand: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%);
+  --qf-gradient-aurora:
+    radial-gradient(1200px 600px at 0% 0%, rgba(99, 102, 241, 0.18) 0%, transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(6, 182, 212, 0.16) 0%, transparent 55%),
+    radial-gradient(900px 600px at 50% 100%, rgba(236, 72, 153, 0.10) 0%, transparent 60%);
+}
+
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  background: var(--qf-color-bg);
+  color: var(--qf-color-text);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(99, 102, 241, 0.22);
+  color: var(--qf-color-text);
+}
+
+/* ----------------------------------------------------------------
+   Scrollbars — slim, themed.
+---------------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.28);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.5);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+/* ----------------------------------------------------------------
+   Reusable surface utilities.
+---------------------------------------------------------------- */
+.qf-aurora {
+  background-image: var(--qf-gradient-aurora);
+}
+
+.qf-glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.7) 100%);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--qf-shadow-md);
+}
+
+.qf-card-hover {
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.qf-card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--qf-shadow-lg);
+}
+
+.qf-gradient-text {
+  background: var(--qf-gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Subtle, accessible focus ring on interactive elements. */
+.qf-focusable:focus-visible {
+  outline: 2px solid var(--qf-color-primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ----------------------------------------------------------------
+   Page transition — used by the AppShell <AnimatePresence /> wrapper.
+   Kept as a CSS class for reduced-motion fallbacks (see below).
+---------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ----------------------------------------------------------------
+   Floating "aurora" blobs used on the auth screen and landing surfaces.
+---------------------------------------------------------------- */
+@keyframes qf-blob-float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(20px, -30px, 0) scale(1.05); }
+  66% { transform: translate3d(-15px, 25px, 0) scale(0.95); }
+}
+.qf-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  animation: qf-blob-float 14s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ----------------------------------------------------------------
+   ReactFlow attribution hide.
+---------------------------------------------------------------- */
+.react-flow__attribution {
+  display: none;
+}
+
+/* ----------------------------------------------------------------
+   Markdown / docs typography — used by the in-app /docs portal.
+---------------------------------------------------------------- */
+.qf-markdown {
+  color: var(--qf-color-text);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.qf-markdown h1,
+.qf-markdown h2,
+.qf-markdown h3,
+.qf-markdown h4 {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--qf-color-text);
+  scroll-margin-top: 92px;
+}
+.qf-markdown h1 { font-size: 30px; margin: 0 0 12px; }
+.qf-markdown h2 {
+  font-size: 22px;
+  margin: 32px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--qf-color-border);
+}
+.qf-markdown h3 { font-size: 18px; margin: 24px 0 10px; }
+.qf-markdown h4 { font-size: 15px; margin: 20px 0 8px; color: var(--qf-color-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.qf-markdown p { margin: 0 0 14px; }
+.qf-markdown a {
+  color: var(--qf-color-primary);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(99, 102, 241, 0.4);
+  transition: color 0.2s, border-color 0.2s;
+}
+.qf-markdown a:hover {
+  color: var(--qf-color-violet);
+  border-bottom-color: var(--qf-color-violet);
+}
+.qf-markdown ul,
+.qf-markdown ol { padding-left: 22px; margin: 0 0 16px; }
+.qf-markdown li { margin: 4px 0; }
+.qf-markdown blockquote {
+  margin: 16px 0;
+  padding: 12px 18px;
+  border-left: 3px solid var(--qf-color-primary);
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: 0 12px 12px 0;
+  color: var(--qf-color-text-muted);
+}
+.qf-markdown code {
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 13px;
+  background: #eef2ff;
+  color: #4338ca;
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+.qf-markdown pre {
+  background: #0b1020;
+  color: #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  margin: 14px 0 18px;
+  font-size: 13px;
+  line-height: 1.55;
+  box-shadow: var(--qf-shadow-md);
+}
+.qf-markdown pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: 13px;
+}
+.qf-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0 20px;
+  font-size: 14px;
+}
+.qf-markdown th,
+.qf-markdown td {
+  border: 1px solid var(--qf-color-border);
+  padding: 10px 12px;
+  text-align: left;
+}
+.qf-markdown th {
+  background: #f1f5f9;
+  color: var(--qf-color-text-muted);
+  font-weight: 600;
+}
+.qf-markdown img {
+  max-width: 100%;
+  border-radius: 12px;
+  box-shadow: var(--qf-shadow-md);
+}
+
+/* highlight.js (atom-one-dark) — minimal subset, scoped to .qf-markdown. */
+.qf-markdown .hljs-keyword,
+.qf-markdown .hljs-selector-tag,
+.qf-markdown .hljs-built_in { color: #c678dd; }
+.qf-markdown .hljs-string,
+.qf-markdown .hljs-attr { color: #98c379; }
+.qf-markdown .hljs-number,
+.qf-markdown .hljs-literal { color: #d19a66; }
+.qf-markdown .hljs-comment { color: #7a8390; font-style: italic; }
+.qf-markdown .hljs-title,
+.qf-markdown .hljs-section { color: #61afef; }
+.qf-markdown .hljs-variable,
+.qf-markdown .hljs-name { color: #e06c75; }
+.qf-markdown .hljs-meta { color: #56b6c2; }

@@ -1,0 +1,14 @@
+app:
+  debug: true
+
+database:
+  pool_size: 1
+  max_overflow: 0
+
+ai:
+  enabled: false
+
+worker:
+  metadata_max_tables: 5
+  profiling_max_tables: 5
+  profiling_sample_size: 100

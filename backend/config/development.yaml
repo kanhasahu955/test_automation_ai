@@ -1,0 +1,12 @@
+# Development overrides on top of base.yaml.
+# All keys are optional; only what you want to change.
+
+app:
+  debug: true
+
+database:
+  pool_size: 5
+  max_overflow: 10
+
+ai:
+  enabled: true

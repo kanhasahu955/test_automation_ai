@@ -1,0 +1,117 @@
+[project]
+name = "qualityforge-ai-backend"
+version = "0.1.0"
+description = "QualityForge AI — AI-powered Quality Engineering Platform (backend)"
+readme = "../README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "QualityForge AI" }]
+
+dependencies = [
+  # ---- Core API ----
+  "fastapi==0.115.4",
+  "uvicorn[standard]==0.32.0",
+  "pydantic==2.9.2",
+  "pydantic-settings>=2.7.0,<3",
+  "python-multipart==0.0.12",
+  "email-validator==2.2.0",
+  # ---- Database ----
+  "sqlmodel==0.0.22",
+  "sqlalchemy==2.0.36",
+  "pymysql==1.1.1",
+  "cryptography==43.0.3",
+  "alembic==1.13.3",
+  # ---- Auth ----
+  "passlib[bcrypt]==1.7.4",
+  "python-jose[cryptography]==3.3.0",
+  "bcrypt==4.0.1",
+  # ---- Queue / Cache ----
+  "redis==5.2.0",
+  "celery==5.4.0",
+  "flower==2.0.1",
+  # ---- HTTP / AI ----
+  "httpx==0.27.2",
+  "openai==1.54.3",
+  "tenacity==9.0.0",
+  # ---- Data / Files ----
+  # great-expectations >=1.3 is the first release that supports pandas 2.2.
+  "pandas>=2.2.3,<3",
+  "openpyxl==3.1.5",
+  "great-expectations>=1.3.0,<2",
+  "sqlparse==0.5.1",
+  # ---- Observability ----
+  "structlog==24.4.0",
+  "prometheus-client==0.21.0",
+  # ---- Misc ----
+  "python-dotenv==1.0.1",
+  "ujson==5.10.0",
+  "PyYAML==6.0.2",
+  "celery-redbeat>=2,<3",
+  "croniter>=2,<3",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3.3",
+  "pytest-asyncio>=0.24.0",
+  "ruff>=0.7.0",
+  "mypy>=1.13.0",
+  "types-python-jose>=3.3.4",
+  "types-passlib>=1.7.7",
+  "types-PyYAML>=6.0.12",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = [
+  "E501",   # line too long (handled by formatter)
+  "B008",   # function-calls in default args (FastAPI Depends, Query)
+  "UP042",  # str+Enum is the conservative ORM pattern; we keep it intentionally
+  "UP046",  # PEP-695 generics break some Pydantic+SQLModel generics; keep `Generic[T]`
+  "UP047",  # Same — keep classic `def f[T](...)` -> none; we use TypeVar T explicitly
+]
+
+[tool.ruff.lint.per-file-ignores]
+# alembic/env.py: models must be imported AFTER metadata setup
+"alembic/env.py" = ["E402"]
+# Tests: allow `assert`, looser style
+"tests/**.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = true
+# Airflow DAGs run inside Airflow's own Python env, not the backend mypy context.
+exclude = ["alembic/versions", "app/airflow_dags"]
+
+# SQLModel does not ship a mypy plugin, so query expressions like
+# `Project.name.ilike(...)` and `Model.created_at.desc()` look like attribute
+# errors on `str | None` even though they are SQLAlchemy column descriptors at
+# runtime. We silence those specific codes for the modules/workers layers and
+# keep mypy strict everywhere else.
+[[tool.mypy.overrides]]
+module = ["app.modules.*", "app.workers.*"]
+disable_error_code = [
+  "union-attr",
+  "attr-defined",
+  "return-value",
+  "arg-type",
+  "assignment",
+  "operator",
+]

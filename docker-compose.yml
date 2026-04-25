@@ -1,0 +1,177 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: qf_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-qualityforge}
+      MYSQL_USER: ${MYSQL_USER:-qfuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-qfpass}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [qf_net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: qf_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [qf_net]
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: qualityforge/backend:latest
+    container_name: qf_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-qfuser}:${MYSQL_PASSWORD:-qfpass}@mysql:3306/${MYSQL_DATABASE:-qualityforge}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - qf_uploads:/var/qf/uploads
+      - qf_artifacts:/var/qf/artifacts
+    ports:
+      - "8000:8000"
+    networks: [qf_net]
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: qualityforge/backend:latest
+    container_name: qf_worker
+    restart: unless-stopped
+    command: celery -A app.core.celery_app.celery_app worker -l info -Q execution,ai,stm,profiling,metadata,default
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-qfuser}:${MYSQL_PASSWORD:-qfpass}@mysql:3306/${MYSQL_DATABASE:-qualityforge}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    volumes:
+      - qf_uploads:/var/qf/uploads
+      - qf_artifacts:/var/qf/artifacts
+    networks: [qf_net]
+
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: qualityforge/backend:latest
+    container_name: qf_beat
+    restart: unless-stopped
+    command: celery -A app.core.celery_app.celery_app beat --scheduler redbeat.RedBeatScheduler -l info
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-qfuser}:${MYSQL_PASSWORD:-qfpass}@mysql:3306/${MYSQL_DATABASE:-qualityforge}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      - redis
+      - backend
+    networks: [qf_net]
+
+  # ---------------------------------------------------------------------------
+  # Operations dashboards — surfaced in the in-app Operations Console.
+  # All three are optional but ship by default for the local-dev workflow.
+  # ---------------------------------------------------------------------------
+  flower:
+    image: qualityforge/backend:latest
+    container_name: qf_flower
+    restart: unless-stopped
+    profiles: ["ops"]
+    command: celery -A app.core.celery_app.celery_app flower --port=5555 --address=0.0.0.0
+    env_file:
+      - ./backend/.env
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      FLOWER_UNAUTHENTICATED_API: "true"
+    depends_on:
+      - redis
+      - worker
+    ports:
+      - "5555:5555"
+    networks: [qf_net]
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: qf_redis_commander
+    restart: unless-stopped
+    profiles: ["ops"]
+    environment:
+      REDIS_HOSTS: "broker:redis:6379:1,results:redis:6379:2,cache:redis:6379:0"
+      HTTP_USER: ${REDIS_COMMANDER_USER:-admin}
+      HTTP_PASSWORD: ${REDIS_COMMANDER_PASSWORD:-admin}
+    depends_on:
+      - redis
+    ports:
+      - "8081:8081"
+    networks: [qf_net]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: qualityforge/frontend:latest
+    container_name: qf_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    expose:
+      - "80"
+    networks: [qf_net]
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: qf_nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks: [qf_net]
+
+volumes:
+  mysql_data:
+  qf_uploads:
+  qf_artifacts:
+
+networks:
+  qf_net:
+    driver: bridge

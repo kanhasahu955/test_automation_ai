@@ -1,0 +1,10 @@
+app:
+  debug: false
+
+database:
+  pool_size: 20
+  max_overflow: 30
+
+worker:
+  metadata_max_tables: 200
+  profiling_max_tables: 100
