@@ -192,13 +192,14 @@ export const TestCasesPage = () => {
         <SelectProjectHint message="Select a project to view its test cases." />
       )}
 
-      <Card>
+      <Card className="overflow-x-auto">
         <Table<TestCase>
           rowKey="id"
           dataSource={items}
           columns={columns}
           loading={loading}
           size="middle"
+          scroll={{ x: "max-content" }}
           pagination={{ pageSize: 10, showSizeChanger: true }}
           locale={{ emptyText: project ? "No test cases yet. Create one or generate with AI." : "" }}
         />

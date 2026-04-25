@@ -38,19 +38,19 @@ import PageHeader from "@components/common/PageHeader";
 import StatCard from "@components/common/StatCard";
 import MotionCard from "@components/motion/MotionCard";
 import { ROUTES } from "@constants/routes";
-import {
-  opsApi,
-  type CeleryQueueStat,
-  type CeleryWorker,
-  type ComponentHealth,
-  type HealthStatus,
-  type OperationsSnapshot,
+import useSocketEvent from "@hooks/useSocketEvent";
+import useSocketRoom from "@hooks/useSocketRoom";
+import { opsApi } from "@services/opsApi";
+import type {
+  CeleryQueueStat,
+  CeleryWorker,
+  ComponentHealth,
+  HealthStatus,
+  OperationsSnapshot,
 } from "@services/opsApi";
 import { tokens } from "@theme/tokens";
 
 const { Text, Title, Paragraph } = Typography;
-
-const REFRESH_MS = 10_000;
 
 const STATUS_META: Record<
   HealthStatus,
@@ -296,10 +296,11 @@ const OperationsPage = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const intervalRef = useRef<number | null>(null);
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  // Manual refresh (toolbar button) still uses the REST endpoint so the user
+  // can force an immediate read independent of the Socket.IO cadence.
+  const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       const s = await opsApi.snapshot();
       setSnap(s);
@@ -309,17 +310,33 @@ const OperationsPage = () => {
       const msg = err instanceof Error ? err.message : "Failed to load operations snapshot.";
       setError(msg);
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
+  // Initial paint via REST so the page is populated even if Socket.IO is
+  // still mid-handshake. We intentionally run this only once on mount; the
+  // ``refresh`` closure is stable enough.
+  const didInitialLoadRef = useRef(false);
   useEffect(() => {
-    load();
-    intervalRef.current = window.setInterval(() => load(true), REFRESH_MS);
-    return () => {
-      if (intervalRef.current) window.clearInterval(intervalRef.current);
-    };
-  }, [load]);
+    if (didInitialLoadRef.current) return;
+    didInitialLoadRef.current = true;
+    void refresh();
+  }, [refresh]);
+
+  // Push-based updates over Socket.IO: joining the ``ops`` room triggers an
+  // immediate snapshot and enrolls us in the 10s broadcast tick. The server
+  // gates the snapshot loop on subscriber count so it does no work when
+  // nobody is watching.
+  useSocketRoom({ type: "ops" });
+  useSocketEvent<OperationsSnapshot>("ops.snapshot", (data) => {
+    setSnap(data);
+    setLastUpdated(new Date());
+    setError(null);
+  });
+  useSocketEvent<{ message?: string }>("ops.error", (data) => {
+    setError(data?.message ?? "Operations probe failed.");
+  });
 
   const totals = useMemo(() => {
     if (!snap) return { workers: 0, active: 0, processed: 0, queues: 0, redbeat: 0 };
@@ -349,7 +366,7 @@ const OperationsPage = () => {
     <div>
       <PageHeader
         title="Operations Console"
-        subtitle="Live health for MySQL, Redis, Celery, Flower and Airflow — refreshes every 10s."
+        subtitle="Live health for MySQL, Redis, Celery, Flower and Airflow — push updates over Socket.IO."
         actions={
           <Space>
             {lastUpdated && (
@@ -357,7 +374,7 @@ const OperationsPage = () => {
                 Updated {lastUpdated.toLocaleTimeString()}
               </Text>
             )}
-            <Button icon={<ReloadOutlined />} onClick={() => load()} loading={loading}>
+            <Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>
               Refresh
             </Button>
           </Space>
@@ -579,6 +596,7 @@ const OperationsPage = () => {
                 pagination={false}
                 dataSource={snap.celery.workers}
                 columns={workerColumns}
+                scroll={{ x: "max-content" }}
               />
             ) : (
               <div style={{ padding: 24 }}>
@@ -614,6 +632,7 @@ const OperationsPage = () => {
               pagination={false}
               dataSource={snap?.celery.queues ?? []}
               columns={queueColumns}
+              scroll={{ x: "max-content" }}
               locale={{
                 emptyText: snap ? "No active queues." : "Loading…",
               }}

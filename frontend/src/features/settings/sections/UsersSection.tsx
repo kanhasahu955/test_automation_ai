@@ -1,4 +1,9 @@
-import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  CrownOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
 import {
   Alert,
   App,
@@ -12,13 +17,15 @@ import {
   Space,
   Switch,
   Tag,
+  Tooltip,
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useAppSelector } from "@app/store";
+import { useAppDispatch, useAppSelector } from "@app/store";
 import { DataTable } from "@components/tables";
+import { setUser } from "@features/auth/authSlice";
 import type { User, UserRole } from "@apptypes/api";
 import { usersApi } from "@services/usersApi";
 import { getApiErrorMessage } from "@utils/apiErrors";
@@ -50,9 +57,10 @@ type UserFormShape = {
 };
 
 export const UsersSection = () => {
-  const { message } = App.useApp();
-  const role = useAppSelector((s) => s.auth.user?.role);
-  const isAdmin = role === "ADMIN";
+  const { message, modal } = App.useApp();
+  const dispatch = useAppDispatch();
+  const currentUser = useAppSelector((s) => s.auth.user);
+  const isAdmin = currentUser?.role === "ADMIN";
 
   const [items, setItems] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -60,6 +68,8 @@ export const UsersSection = () => {
   const [editing, setEditing] = useState<User | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  /** Per-row "role being applied" set — drives the Select's loading state. */
+  const [rolePending, setRolePending] = useState<Set<string>>(new Set());
   const [form] = Form.useForm<UserFormShape>();
 
   const load = useCallback(async () => {
@@ -77,6 +87,14 @@ export const UsersSection = () => {
   useEffect(() => {
     if (isAdmin) void load();
   }, [load, isAdmin]);
+
+  /** How many active admins are currently in the loaded page — used to gate UX
+   *  hints (e.g. disabling self-demotion when you're the only admin showing).
+   *  Server still enforces the real invariant — this is just for nicer UX. */
+  const activeAdminCount = useMemo(
+    () => items.filter((u) => u.role === "ADMIN" && u.is_active).length,
+    [items],
+  );
 
   if (!isAdmin) {
     return (
@@ -113,12 +131,15 @@ export const UsersSection = () => {
     setSaving(true);
     try {
       if (editing) {
-        await usersApi.update(editing.id, {
+        const updated = await usersApi.update(editing.id, {
           name: values.name,
           role: values.role,
           is_active: values.is_active,
           password: values.password ? values.password : undefined,
         });
+        if (currentUser && updated.id === currentUser.id) {
+          dispatch(setUser(updated));
+        }
         message.success("User updated.");
       } else {
         if (!values.password) {
@@ -153,13 +174,76 @@ export const UsersSection = () => {
     }
   };
 
+  /** Inline role rotation — the canonical "make admin / change role" UX. */
+  const onRoleChange = async (user: User, nextRole: UserRole) => {
+    if (user.role === nextRole) return;
+
+    const isSelf = currentUser?.id === user.id;
+    const isDemotingSelfFromAdmin =
+      isSelf && user.role === "ADMIN" && nextRole !== "ADMIN";
+
+    // Self-demotion is destructive — confirm first. The user will lose
+    // access to admin-only screens (including this one) immediately.
+    if (isDemotingSelfFromAdmin) {
+      const ok = await new Promise<boolean>((resolve) => {
+        modal.confirm({
+          title: "Demote yourself from admin?",
+          content:
+            "You will lose access to admin-only screens (including User Management) as soon as this saves. Make sure another admin is available.",
+          okText: "Yes, change my role",
+          okButtonProps: { danger: true },
+          cancelText: "Cancel",
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!ok) return;
+    }
+
+    setRolePending((s) => new Set(s).add(user.id));
+    // Optimistic update — flip the cell immediately for snappy feel.
+    const previous = user.role;
+    setItems((rows) =>
+      rows.map((r) => (r.id === user.id ? { ...r, role: nextRole } : r)),
+    );
+
+    try {
+      const updated = await usersApi.updateRole(user.id, nextRole);
+      // Sync from the server response in case anything else changed.
+      setItems((rows) => rows.map((r) => (r.id === user.id ? updated : r)));
+      if (isSelf && currentUser) {
+        dispatch(setUser(updated));
+      }
+      message.success(
+        nextRole === "ADMIN"
+          ? `${user.name} is now an admin.`
+          : `${user.name}'s role updated to ${nextRole.replace("_", " ")}.`,
+      );
+    } catch (err) {
+      // Roll back the optimistic flip.
+      setItems((rows) =>
+        rows.map((r) => (r.id === user.id ? { ...r, role: previous } : r)),
+      );
+      message.error(getApiErrorMessage(err, "Failed to change role"));
+    } finally {
+      setRolePending((s) => {
+        const next = new Set(s);
+        next.delete(user.id);
+        return next;
+      });
+    }
+  };
+
   const columns: ColumnsType<User> = [
     {
       title: "Name",
       dataIndex: "name",
       render: (_v, u) => (
         <Space direction="vertical" size={0}>
-          <Text strong>{u.name}</Text>
+          <Space size={6}>
+            <Text strong>{u.name}</Text>
+            {currentUser?.id === u.id && <Tag color="gold">you</Tag>}
+          </Space>
           <Text type="secondary" style={{ fontSize: 12 }}>
             {u.email}
           </Text>
@@ -170,10 +254,37 @@ export const UsersSection = () => {
     {
       title: "Role",
       dataIndex: "role",
-      width: 160,
-      render: (r: UserRole) => <Tag color={ROLE_COLOR[r]}>{r}</Tag>,
+      width: 200,
       filters: ROLE_OPTIONS.map((opt) => ({ text: opt.label, value: opt.value })),
       onFilter: (value, record) => record.role === value,
+      render: (currentRole: UserRole, u) => {
+        const lastAdminLockout =
+          u.role === "ADMIN" && u.is_active && activeAdminCount <= 1;
+        return (
+          <Tooltip
+            title={
+              lastAdminLockout
+                ? "This is the only active admin — promote someone else first."
+                : undefined
+            }
+            placement="topLeft"
+          >
+            <Select
+              value={currentRole}
+              size="small"
+              style={{ width: 170 }}
+              variant="borderless"
+              loading={rolePending.has(u.id)}
+              disabled={rolePending.has(u.id) || lastAdminLockout}
+              onChange={(value) => onRoleChange(u, value)}
+              options={ROLE_OPTIONS.map((opt) => ({
+                value: opt.value,
+                label: <Tag color={ROLE_COLOR[opt.value]}>{opt.label}</Tag>,
+              }))}
+            />
+          </Tooltip>
+        );
+      },
     },
     {
       title: "Status",
@@ -192,21 +303,58 @@ export const UsersSection = () => {
     {
       title: "",
       key: "actions",
-      width: 140,
+      width: 160,
       align: "right",
-      render: (_v, u) => (
-        <Space size={4}>
-          <Button type="text" icon={<EditOutlined />} onClick={() => openEdit(u)} />
-          <Popconfirm
-            title={`Delete "${u.name}"?`}
-            okType="danger"
-            okText="Delete"
-            onConfirm={() => onRemove(u)}
-          >
-            <Button type="text" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
-        </Space>
-      ),
+      render: (_v, u) => {
+        const isSelf = currentUser?.id === u.id;
+        const lastAdminLockout =
+          u.role === "ADMIN" && u.is_active && activeAdminCount <= 1;
+        return (
+          <Space size={4}>
+            {u.role !== "ADMIN" && (
+              <Tooltip title="Make admin">
+                <Button
+                  type="text"
+                  icon={<CrownOutlined />}
+                  loading={rolePending.has(u.id)}
+                  onClick={() => onRoleChange(u, "ADMIN")}
+                />
+              </Tooltip>
+            )}
+            <Tooltip title="Edit">
+              <Button
+                type="text"
+                icon={<EditOutlined />}
+                onClick={() => openEdit(u)}
+              />
+            </Tooltip>
+            <Popconfirm
+              title={`Delete "${u.name}"?`}
+              okType="danger"
+              okText="Delete"
+              disabled={isSelf || lastAdminLockout}
+              onConfirm={() => onRemove(u)}
+            >
+              <Tooltip
+                title={
+                  isSelf
+                    ? "You can't delete yourself"
+                    : lastAdminLockout
+                      ? "Can't delete the last active admin"
+                      : "Delete"
+                }
+              >
+                <Button
+                  type="text"
+                  danger
+                  disabled={isSelf || lastAdminLockout}
+                  icon={<DeleteOutlined />}
+                />
+              </Tooltip>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -232,6 +380,13 @@ export const UsersSection = () => {
         </Space>
       }
     >
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message="Promote a user to admin"
+        description="Click the crown icon on any row to grant admin access, or use the role dropdown to change roles inline. The platform always keeps at least one active admin."
+      />
       <DataTable<User>
         rowKey="id"
         data={items}

@@ -6,7 +6,7 @@ from sqlmodel import select
 from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.modules.data_sources.models import DataSource
-from app.modules.data_sources.service import _build_sqlalchemy_url
+from app.modules.data_sources.service import build_engine_url_for_data
 from app.modules.executions.models import ExecutionRun, ResultStatus, RunStatus, RunType
 from app.modules.executions.service import append_result, update_run_status
 from app.modules.sql_generator.models import GeneratedSqlTest
@@ -62,9 +62,12 @@ def run_stm_validation(stm_document_id: str, data_source_id: str | None,
                     result_json={"sql_id": sql.id},
                 )
                 continue
-            url = _build_sqlalchemy_url(ds)
+            url = build_engine_url_for_data(ds)
             if not url:
-                append_result(session, run.id, status=ResultStatus.SKIPPED, error_message="Unsupported source type")
+                append_result(
+                    session, run.id, status=ResultStatus.SKIPPED,
+                    error_message="Data source has no database name set",
+                )
                 continue
             try:
                 from sqlalchemy import create_engine, text

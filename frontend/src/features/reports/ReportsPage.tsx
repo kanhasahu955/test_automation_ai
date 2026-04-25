@@ -322,6 +322,7 @@ export const ReportsPage = () => {
               dataSource={runs}
               columns={runColumns}
               size="small"
+              scroll={{ x: "max-content" }}
               pagination={{ pageSize: 10 }}
               onRow={(row) => ({
                 onClick: () => dispatch(selectRun(row.id)),
@@ -372,6 +373,7 @@ export const ReportsPage = () => {
                   dataSource={report.results}
                   columns={resultColumns}
                   size="small"
+                  scroll={{ x: "max-content" }}
                   pagination={{ pageSize: 10 }}
                 />
                 {report.results.some((r) => r.error_message) && (

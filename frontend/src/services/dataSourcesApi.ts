@@ -16,11 +16,35 @@ export type DataSource = {
   port?: number | null;
   database_name?: string | null;
   username?: string | null;
+  /** e.g. `{ sslmode: "require" }` for Neon / Supabase (PostgreSQL). */
+  extra_config?: Record<string, unknown> | null;
   is_active: boolean;
   created_at?: string;
 };
 
 export type TestConnectionResult = { ok: boolean; message: string };
+
+export type LiveTable = { schema_name: string | null; table_name: string };
+
+export type LiveColumn = {
+  name: string;
+  data_type: string;
+  nullable: boolean;
+  is_pk: boolean;
+  is_fk: boolean;
+  default: string | null;
+  autoincrement: boolean | null;
+  comment: string | null;
+};
+
+export type LiveForeignKeyEdge = {
+  constrained_schema: string | null;
+  constrained_table: string;
+  constrained_column: string;
+  referred_schema: string | null;
+  referred_table: string;
+  referred_column: string;
+};
 
 export type DataSourceCreateInput = {
   name: string;
@@ -70,6 +94,36 @@ export class DataSourcesApiClient extends BaseApiClient {
       `/data-sources/${id}/scan-metadata`,
     );
   }
+
+  listDatabases(id: string): Promise<{ databases: string[] }> {
+    return this.get<{ databases: string[] }>(`/data-sources/${id}/databases`);
+  }
+
+  liveTables(id: string, database: string): Promise<{ tables: LiveTable[] }> {
+    return this.get<{ tables: LiveTable[] }>(`/data-sources/${id}/live/tables`, {
+      params: { database },
+    });
+  }
+
+  liveColumns(
+    id: string,
+    params: { database: string; table: string; schema?: string | null },
+  ): Promise<{ columns: LiveColumn[] }> {
+    return this.get<{ columns: LiveColumn[] }>(`/data-sources/${id}/live/columns`, {
+      params: {
+        database: params.database,
+        table: params.table,
+        schema: params.schema && params.schema.trim() ? params.schema : undefined,
+      },
+    });
+  }
+
+  liveRelations(id: string, database: string): Promise<{ relations: LiveForeignKeyEdge[] }> {
+    return this.get<{ relations: LiveForeignKeyEdge[] }>(
+      `/data-sources/${id}/live/relations`,
+      { params: { database } },
+    );
+  }
 }
 
 const client = new DataSourcesApiClient();
@@ -83,4 +137,9 @@ export const dataSourcesApi = {
   remove: (id: string) => client.remove(id),
   testConnection: (id: string) => client.testConnection(id),
   scanMetadata: (id: string) => client.scanMetadata(id),
+  listDatabases: (id: string) => client.listDatabases(id),
+  liveTables: (id: string, database: string) => client.liveTables(id, database),
+  liveColumns: (id: string, params: { database: string; table: string; schema?: string | null }) =>
+    client.liveColumns(id, params),
+  liveRelations: (id: string, database: string) => client.liveRelations(id, database),
 };

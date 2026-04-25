@@ -17,10 +17,7 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    session: Session = Depends(get_session),
-) -> User:
+def _user_from_token(token: str, session: Session) -> User:
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -42,6 +39,13 @@ def get_current_user(
     if user is None or not user.is_active:
         raise credentials_exc
     return user
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    session: Session = Depends(get_session),
+) -> User:
+    return _user_from_token(token, session)
 
 
 def require_roles(*roles: UserRole):

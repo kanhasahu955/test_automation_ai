@@ -1,9 +1,17 @@
-"""Execution services."""
+"""Execution services.
+
+Every state-changing call publishes a Redis pub/sub event on the
+``qf:project:{project_id}`` channel so the Socket.IO bridge in
+``app.core.socketio`` can push the update to subscribed browsers
+(Dashboard + Executions). Publishing is fire-and-forget — a Redis
+outage MUST NOT block the database commit.
+"""
 from __future__ import annotations
 
 from sqlmodel import Session, func, select
 
 from app.core.errors import NotFoundError
+from app.core.realtime import project_channel, publish
 from app.modules.executions.models import (
     ExecutionResult,
     ExecutionRun,
@@ -21,6 +29,31 @@ from app.modules.test_cases.models import TestCase
 from app.modules.test_suites.models import TestSuite, TestSuiteCase
 from app.utils.datetime import utc_now_naive
 
+# ---------- Realtime emit helpers --------------------------------------------
+
+
+def _emit_run(run: ExecutionRun, *, event_type: str) -> None:
+    """Publish a run-shape event on the project's realtime channel."""
+    if not run or not run.project_id:
+        return
+    publish(
+        project_channel(run.project_id),
+        event_type,
+        ExecutionRunRead.model_validate(run).model_dump(mode="json"),
+    )
+    # Run state changes invalidate the regression list — let subscribers
+    # know they should refetch ``GET /projects/{id}/regressions`` (we don't
+    # ship the new list inline since it requires a DB query).
+    if event_type in {"run.updated", "run.created"} and run.status in {
+        RunStatus.PASSED,
+        RunStatus.FAILED,
+    }:
+        publish(
+            project_channel(run.project_id),
+            "regressions.invalidated",
+            {"project_id": run.project_id, "run_id": run.id},
+        )
+
 
 def _enqueue_run(run_id: str, *, kind: str) -> None:
     """Push the run to the Celery queue (graceful if broker unavailable)."""
@@ -31,6 +64,9 @@ def _enqueue_run(run_id: str, *, kind: str) -> None:
     except Exception:
         # In dev (no broker) the API still returns the queued run; worker will pick later.
         pass
+
+
+# ---------- CRUD-style API ---------------------------------------------------
 
 
 def create_suite_run(
@@ -53,6 +89,7 @@ def create_suite_run(
     session.add(run)
     session.commit()
     session.refresh(run)
+    _emit_run(run, event_type="run.created")
     _enqueue_run(run.id, kind="suite")
     return ExecutionRunRead.model_validate(run)
 
@@ -72,6 +109,7 @@ def create_flow_run(session: Session, flow_id: str, triggered_by: str) -> Execut
     session.add(run)
     session.commit()
     session.refresh(run)
+    _emit_run(run, event_type="run.created")
     _enqueue_run(run.id, kind="flow")
     return ExecutionRunRead.model_validate(run)
 
@@ -136,6 +174,7 @@ def update_run_status(session: Session, run_id: str, status: RunStatus, finished
     session.add(run)
     session.commit()
     session.refresh(run)
+    _emit_run(run, event_type="run.updated")
     return run
 
 
@@ -176,4 +215,18 @@ def append_result(
 
     session.commit()
     session.refresh(result)
+    if run is not None:
+        _emit_run(run, event_type="run.updated")
+        publish(
+            project_channel(run.project_id),
+            "run.result",
+            {
+                "run_id": run.id,
+                "result_id": result.id,
+                "status": result.status.value if hasattr(result.status, "value") else str(result.status),
+                "test_case_id": result.test_case_id,
+                "flow_id": result.flow_id,
+                "duration_ms": result.duration_ms,
+            },
+        )
     return result

@@ -29,6 +29,15 @@ export default defineConfig({
         target: process.env.VITE_API_PROXY || "http://localhost:8000",
         changeOrigin: true,
       },
+      // Socket.IO (engine.io) handshake + WebSocket upgrade. The backend
+      // mounts python-socketio at the root path ``/socket.io`` (alongside
+      // FastAPI under ``/api``), so we forward the same path through with
+      // ``ws: true`` so the upgrade survives the proxy hop.
+      "/socket.io": {
+        target: process.env.VITE_API_PROXY || "http://localhost:8000",
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 });

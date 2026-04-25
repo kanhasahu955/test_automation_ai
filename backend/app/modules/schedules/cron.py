@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from croniter import croniter  # type: ignore[import-untyped]
+from croniter import croniter  # type: ignore[import-untyped,unused-ignore]
 
 from app.core.errors import ValidationFailed
 from app.modules.schedules.models import CadenceKind

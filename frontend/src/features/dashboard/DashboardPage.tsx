@@ -26,7 +26,7 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -44,6 +44,8 @@ import MotionCard from "@components/motion/MotionCard";
 import { useAppDispatch, useAppSelector } from "@app/store";
 import { ROUTES } from "@constants/routes";
 import { selectRun } from "@features/executions/executionsSlice";
+import useSocketEvent from "@hooks/useSocketEvent";
+import useSocketRoom from "@hooks/useSocketRoom";
 import { useSelectedProject } from "@hooks/useSelectedProject";
 import type { ActivityItem, RegressionItem, TopFailingTest } from "@services/reportsApi";
 import { tokens } from "@theme/tokens";
@@ -54,8 +56,6 @@ import {
 } from "@features/reports/reportsSlice";
 
 const { Text, Title } = Typography;
-
-const DASHBOARD_REFRESH_MS = 15_000;
 const DONUT_COLORS = [tokens.color.success, tokens.color.danger, tokens.color.warning];
 
 const fmtTime = (iso?: string | null): string => {
@@ -94,20 +94,41 @@ export const DashboardPage = () => {
     loading,
   } = useAppSelector((s) => s.reports);
 
+  // Initial load on mount / project change.
   useEffect(() => {
     if (!projectId) return;
     dispatch(fetchDashboardRequest({ projectId, days: 14 }));
     dispatch(fetchRegressionsRequest({ projectId, limit: 25 }));
   }, [projectId, dispatch]);
 
-  useEffect(() => {
+  // Push-based refresh: the backend publishes events on ``qf:project:{id}``
+  // every time a run state changes or a regression-relevant event fires. We
+  // debounce a single refresh per 1.5s window so a flurry of `run.result`
+  // events (one per test in a suite) doesn't translate into N dashboard
+  // refetches — one is enough.
+  const refreshTimerRef = useRef<number | null>(null);
+  const scheduleRefresh = useCallback(() => {
     if (!projectId) return;
-    const id = window.setInterval(() => {
+    if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = window.setTimeout(() => {
       dispatch(fetchDashboardRequest({ projectId, days: 14 }));
       dispatch(fetchRegressionsRequest({ projectId, limit: 25 }));
-    }, DASHBOARD_REFRESH_MS);
-    return () => window.clearInterval(id);
+    }, 1500);
   }, [projectId, dispatch]);
+
+  useEffect(() => () => {
+    if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+  }, []);
+
+  // Push-based refresh via Socket.IO. The backend bridge (Redis pub/sub →
+  // ``project:<id>`` room) re-emits the event under its original name, so
+  // we just listen for the four signals we care about and let the debounced
+  // ``scheduleRefresh()`` collapse bursts.
+  useSocketRoom(projectId ? { type: "project", id: projectId } : null);
+  useSocketEvent("run.created", scheduleRefresh, !!projectId);
+  useSocketEvent("run.updated", scheduleRefresh, !!projectId);
+  useSocketEvent("run.result", scheduleRefresh, !!projectId);
+  useSocketEvent("regressions.invalidated", scheduleRefresh, !!projectId);
 
   const passRate = kpis?.pass_rate ?? 0;
   const failRate = kpis?.fail_rate ?? 0;

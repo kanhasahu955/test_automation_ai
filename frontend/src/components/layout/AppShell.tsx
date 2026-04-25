@@ -11,6 +11,7 @@ import {
   ExperimentOutlined,
   FileSearchOutlined,
   LogoutOutlined,
+  MenuOutlined,
   MonitorOutlined,
   NodeIndexOutlined,
   PartitionOutlined,
@@ -19,10 +20,22 @@ import {
   SettingOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Avatar, Badge, Dropdown, Layout, Menu, Space, Tooltip, Typography } from "antd";
+import {
+  Avatar,
+  Badge,
+  Button,
+  Drawer,
+  Dropdown,
+  Grid,
+  Layout,
+  Menu,
+  Space,
+  Tooltip,
+  Typography,
+} from "antd";
 import type { MenuProps } from "antd";
 import { AnimatePresence, motion } from "framer-motion";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@features/auth/useAuth";
@@ -85,6 +98,14 @@ export const AppShell = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const screens = Grid.useBreakpoint();
+  /** Matches <Sider breakpoint="lg" /> (992px) — drawer + hamburger below this width. */
+  const isLgDown = screens.lg === false;
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   const selectedKey = useMemo(() => {
     const match = NAV.find(
@@ -192,39 +213,91 @@ export const AppShell = () => {
         </div>
       </Sider>
 
+      <Drawer
+        title={null}
+        placement="left"
+        width={280}
+        open={isLgDown && mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        styles={{ body: { padding: 0 } }}
+        className="[&_.ant-drawer-body]:p-0"
+      >
+        <div
+          className="flex min-h-full flex-col"
+          style={{ background: tokens.gradient.sidebar }}
+        >
+          <div className="flex flex-none items-center gap-3 border-b border-white/10 px-4 py-4 text-white">
+            <div
+              className="grid h-10 w-10 place-items-center rounded-xl font-bold text-white"
+              style={{ background: tokens.gradient.brand, boxShadow: tokens.shadow.glow }}
+            >
+              QF
+            </div>
+            <div className="min-w-0 flex flex-col leading-tight">
+              <span className="truncate text-[15px] font-semibold text-white">QualityForge AI</span>
+              <span className="text-[11px] text-white/60">Menu</span>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 pb-6 pt-2">
+            <Menu
+              theme="dark"
+              mode="inline"
+              selectedKeys={[selectedKey]}
+              onClick={({ key }) => {
+                navigate(String(key));
+                setMobileMenuOpen(false);
+              }}
+              items={SHELL_MENU_ITEMS}
+              style={{ background: "transparent", borderInlineEnd: 0 }}
+            />
+          </div>
+        </div>
+      </Drawer>
+
       <Layout>
         <Header
-          className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200/60 bg-white/80 px-6 backdrop-blur-md backdrop-saturate-150"
-          style={{ height: 64, lineHeight: "64px" }}
+          className="sticky top-0 z-10 flex min-h-14 items-center justify-between gap-2 border-b border-slate-200/60 bg-white/80 px-3 py-2 backdrop-blur-md backdrop-saturate-150 sm:min-h-16 sm:gap-3 sm:px-4 sm:py-0 md:px-6"
+          style={{ lineHeight: 1.25 }}
         >
-          {/* Active page badge + label. */}
-          <motion.div
-            key={selectedKey}
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-            className="inline-flex min-w-0 flex-shrink items-center gap-2.5"
-          >
-            <span
-              aria-hidden
-              className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-base text-primary"
-              style={{ background: tokens.gradient.brandSoft }}
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
+            {isLgDown && (
+              <Button
+                type="text"
+                icon={<MenuOutlined className="text-lg" />}
+                aria-label="Open menu"
+                onClick={() => setMobileMenuOpen(true)}
+                className="!inline-flex h-10 w-10 shrink-0 items-center justify-center"
+              />
+            )}
+            {/* Active page badge + label. */}
+            <motion.div
+              key={selectedKey}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="inline-flex min-w-0 flex-1 items-center gap-2.5"
             >
-              {activeIcon}
-            </span>
-            <Text strong className="!truncate !text-base !leading-tight !tracking-tight">
-              {activeLabel}
-            </Text>
-          </motion.div>
+              <span
+                aria-hidden
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-base text-primary"
+                style={{ background: tokens.gradient.brandSoft }}
+              >
+                {activeIcon}
+              </span>
+              <Text strong className="!line-clamp-2 !text-sm !leading-tight !tracking-tight sm:!line-clamp-none sm:!truncate sm:!text-base">
+                {activeLabel}
+              </Text>
+            </motion.div>
+          </div>
 
           {/* Right cluster — quick links + user pill. */}
-          <div className="inline-flex flex-none items-center gap-2">
+          <div className="inline-flex max-w-[45%] flex-none items-center justify-end gap-0.5 sm:max-w-none sm:gap-2">
             <Tooltip title="Documentation">
               <button
                 type="button"
                 aria-label="Documentation"
                 onClick={() => navigate(ROUTES.DOCS)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border-0 bg-transparent text-slate-600 transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                className="hidden sm:inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border-0 bg-transparent text-slate-600 transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 <BookOutlined style={{ fontSize: 18 }} />
               </button>
@@ -235,7 +308,7 @@ export const AppShell = () => {
                 type="button"
                 aria-label="Notifications"
                 onClick={() => navigate(ROUTES.NOTIFICATIONS)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border-0 bg-transparent text-slate-600 transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                className="hidden sm:inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border-0 bg-transparent text-slate-600 transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 <Badge count={0} size="small" offset={[-2, 2]}>
                   <BellOutlined style={{ fontSize: 18 }} />
@@ -248,13 +321,13 @@ export const AppShell = () => {
                 type="button"
                 aria-label="Settings"
                 onClick={() => navigate(ROUTES.SETTINGS)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border-0 bg-transparent text-slate-600 transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border-0 bg-transparent text-slate-600 transition-colors duration-150 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 <SettingOutlined style={{ fontSize: 18 }} />
               </button>
             </Tooltip>
 
-            <span aria-hidden className="mx-1 h-6 w-px bg-slate-900/10" />
+            <span aria-hidden className="mx-0.5 hidden h-6 w-px bg-slate-900/10 sm:mx-1 sm:inline-block" />
 
             <Dropdown menu={{ items: userMenu }} trigger={["click"]} placement="bottomRight">
               <button
@@ -285,7 +358,7 @@ export const AppShell = () => {
         </Header>
 
         <Content
-          className="p-6"
+          className="box-border min-w-0 p-4 sm:p-5 md:p-6"
           style={{
             background: tokens.color.bg,
             backgroundImage: tokens.gradient.aurora,

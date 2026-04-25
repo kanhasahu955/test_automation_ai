@@ -9,7 +9,7 @@ from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.modules.data_profiling.models import DataProfilingRun, ProfileStatus
 from app.modules.data_sources.models import DataSource
-from app.modules.data_sources.service import _build_sqlalchemy_url
+from app.modules.data_sources.service import build_engine_url_for_data
 from app.utils.datetime import utc_now_naive
 from app.workers.db import task_session
 
@@ -28,7 +28,7 @@ def run_profiling(run_id: str) -> dict:
         ds = session.exec(select(DataSource).where(DataSource.id == run.data_source_id)).first()
         summary: dict = {"tables": []}
         try:
-            url = _build_sqlalchemy_url(ds) if ds else None
+            url = build_engine_url_for_data(ds) if ds else None
             if url:
                 from sqlalchemy import create_engine, inspect
 

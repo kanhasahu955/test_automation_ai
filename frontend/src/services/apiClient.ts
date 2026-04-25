@@ -58,6 +58,11 @@ export const setTokens = (access: string | null, refresh: string | null): void =
 export const setUnauthorizedHandler = (cb: () => void): void =>
   tokenStore.setUnauthorizedHandler(cb);
 
+/** Read the live access token. The Socket.IO singleton calls this lazily
+ *  inside its ``auth`` callback so a refreshed JWT is picked up on the
+ *  next reconnect without tearing the socket down. */
+export const getAccessToken = (): string | null => tokenStore.getAccess();
+
 /**
  * Build a configured axios instance with:
  *  - Bearer token injection on every outgoing request.

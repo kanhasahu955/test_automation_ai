@@ -27,16 +27,19 @@ export const AuthLayout = ({
   showLogo = true,
 }: Props) => (
   <div
+    className="box-border p-4 sm:p-6"
     style={{
       minHeight: "100vh",
       display: "grid",
       placeItems: "center",
       background:
         "radial-gradient(circle at 20% 20%, rgba(99,102,241,0.20), transparent 50%), radial-gradient(circle at 80% 80%, rgba(6,182,212,0.20), transparent 50%), #0f172a",
-      padding: 24,
     }}
   >
-    <Card style={{ width, boxShadow: "0 30px 60px rgba(15,23,42,0.4)" }}>
+    <Card
+      className="w-full"
+      style={{ maxWidth: width, boxShadow: "0 30px 60px rgba(15,23,42,0.4)" }}
+    >
       <Space direction="vertical" size={6} style={{ width: "100%", marginBottom: 20 }}>
         <Space>
           {showLogo && (

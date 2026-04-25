@@ -1,13 +1,31 @@
-"""AI generation service. Uses OpenAI when configured; otherwise deterministic fallback."""
+"""AI generation service.
+
+Resolves the LLM configuration in this order of precedence:
+
+1. **DB-backed app settings** (`/api/v1/settings/llm`) — what the in-app
+   "Settings → LLM" screen writes. These are the source of truth for
+   running deployments because admins can rotate the key without redeploys.
+2. **Process environment** (``OPENAI_API_KEY`` / ``OPENAI_MODEL`` /
+   ``OPENAI_BASE_URL`` / ``AI_ENABLED``) — convenient for dev and CI.
+
+If neither yields a usable configuration, every public function falls back
+to deterministic templates and sets ``used_fallback: True``.
+
+When the LLM is configured but the call fails (bad key, model, network),
+we raise :class:`app.core.errors.AppError` with a helpful message — the
+frontend already knows how to render that via ``getApiErrorMessage``.
+"""
 from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from sqlmodel import Session
 
 from app.core.config import settings
+from app.core.errors import AppError
 from app.core.logger import get_logger
 from app.modules.ai_generator.models import AIPromptHistory, PromptType
 from app.modules.ai_generator.prompts import (
@@ -23,12 +41,128 @@ from app.utils.sql_templates import render_validation_sql
 log = get_logger("ai")
 
 
-def _has_openai() -> bool:
-    return bool(settings.AI_ENABLED and settings.OPENAI_API_KEY)
+# ---------- LLM configuration resolution -------------------------------------
 
 
-def _record(session: Session | None, prompt_type: PromptType, prompt: str, response: str,
-            model: str, project_id: str | None = None, user_id: str | None = None) -> None:
+@dataclass(frozen=True)
+class _LlmConfig:
+    """Effective LLM configuration after merging DB + env."""
+
+    api_key: str
+    model: str
+    base_url: str | None
+    temperature: float
+    max_tokens: int
+    timeout_seconds: int
+    provider: str
+    source: str  # "db" or "env" — for logs / debug surfacing
+
+
+def _resolve_config(session: Session | None) -> _LlmConfig | None:
+    """Pick the best available LLM config; ``None`` means "no LLM, use fallbacks".
+
+    DB-backed settings take priority because they're rotatable at runtime.
+    The env path is the dev-friendly fallback used when no admin has
+    configured Settings → LLM yet.
+    """
+    db_cfg = _try_db_config(session)
+    if db_cfg is not None:
+        return db_cfg
+    return _try_env_config()
+
+
+def _try_db_config(session: Session | None) -> _LlmConfig | None:
+    if session is None:
+        return None
+    try:
+        # Local imports avoid a circular module dependency at import time.
+        from app.modules.app_settings.service import get_llm, get_llm_api_key
+
+        cfg = get_llm(session)
+        if not cfg.enabled or cfg.provider == "DISABLED":
+            return None
+        api_key = get_llm_api_key(session) or ""
+        # Ollama doesn't need a real key; everyone else does.
+        if not api_key and cfg.provider != "OLLAMA":
+            return None
+        return _LlmConfig(
+            api_key=api_key or "ollama",
+            model=cfg.model,
+            base_url=cfg.base_url or None,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+            timeout_seconds=cfg.timeout_seconds,
+            provider=cfg.provider,
+            source="db",
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("ai.db_config_failed", error=str(exc))
+        return None
+
+
+def _try_env_config() -> _LlmConfig | None:
+    if not settings.AI_ENABLED:
+        return None
+    api_key = (settings.OPENAI_API_KEY or "").strip()
+    if not api_key or api_key.startswith("replace-me"):
+        return None
+    return _LlmConfig(
+        api_key=api_key,
+        model=settings.OPENAI_MODEL,
+        base_url=(settings.OPENAI_BASE_URL or "").strip() or None,
+        temperature=0.2,
+        max_tokens=1024,
+        timeout_seconds=60,
+        provider="OPENAI",
+        source="env",
+    )
+
+
+def _has_llm(session: Session | None) -> bool:
+    return _resolve_config(session) is not None
+
+
+def get_status(session: Session | None) -> dict[str, Any]:
+    """Public summary of the active LLM config — used by the AI Studio banner.
+
+    Never includes the API key. ``reason`` explains *why* it's disabled when
+    that's the case, so the UI can guide the admin to fix it.
+    """
+    cfg = _resolve_config(session)
+    if cfg is not None:
+        return {
+            "enabled": True,
+            "provider": cfg.provider,
+            "model": cfg.model,
+            "source": cfg.source,
+            "reason": None,
+        }
+    # Disabled — figure out why so the UI banner is actionable.
+    if not settings.AI_ENABLED:
+        reason = "AI is disabled (AI_ENABLED=false in backend env)."
+    else:
+        reason = (
+            "No LLM is configured. Open Settings → LLM to set a provider + API key, "
+            "or set OPENAI_API_KEY in the backend environment."
+        )
+    return {
+        "enabled": False,
+        "provider": None,
+        "model": None,
+        "source": None,
+        "reason": reason,
+    }
+
+
+def _record(
+    session: Session | None,
+    prompt_type: PromptType,
+    prompt: str,
+    response: str,
+    model: str,
+    project_id: str | None = None,
+    user_id: str | None = None,
+) -> None:
     if session is None:
         return
     try:
@@ -46,19 +180,116 @@ def _record(session: Session | None, prompt_type: PromptType, prompt: str, respo
         log.warning("ai_history_failed")
 
 
-def _call_openai(prompt: str, *, json_mode: bool = False) -> str:
-    from openai import OpenAI  # local import keeps optional
+def _call_llm(cfg: _LlmConfig, prompt: str, *, json_mode: bool = False) -> str:
+    """Call the configured LLM. Raises :class:`AppError` on failure."""
+    try:
+        # Lazy import keeps the dependency optional at module-load time.
+        from openai import OpenAI
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    kwargs: dict[str, Any] = {
-        "model": settings.OPENAI_MODEL,
-        "temperature": 0.2,
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    if json_mode:
-        kwargs["response_format"] = {"type": "json_object"}
-    response = client.chat.completions.create(**kwargs)
-    return response.choices[0].message.content or ""
+        client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+        kwargs: dict[str, Any] = {
+            "model": cfg.model,
+            "temperature": cfg.temperature,
+            "max_tokens": cfg.max_tokens,
+            "timeout": cfg.timeout_seconds,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        response = client.chat.completions.create(**kwargs)
+        return response.choices[0].message.content or ""
+    except AppError:
+        raise
+    except Exception as exc:
+        # Map common provider errors to user-friendly messages. We deliberately
+        # avoid leaking the API key or other internals.
+        message = _humanize_llm_error(exc, cfg)
+        log.error(
+            "ai.llm_call_failed",
+            error=str(exc),
+            error_type=exc.__class__.__name__,
+            model=cfg.model,
+            provider=cfg.provider,
+            source=cfg.source,
+        )
+        raise AppError(
+            message,
+            code="ai_provider_error",
+            status_code=502,
+            extra={"provider": cfg.provider, "model": cfg.model, "source": cfg.source},
+        ) from exc
+
+
+def _call_llm_stream(cfg: _LlmConfig, prompt: str):
+    """Yield text deltas from the LLM as they arrive.
+
+    Generator: each ``yield`` returns a string chunk (zero or more tokens).
+    Use only for the prose-friendly endpoints — JSON-mode generations do
+    *not* stream cleanly because the JSON is only valid after the last
+    token, so callers should still buffer + parse for those.
+
+    Errors are wrapped as :class:`AppError` exactly like ``_call_llm``.
+    """
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+        kwargs: dict[str, Any] = {
+            "model": cfg.model,
+            "temperature": cfg.temperature,
+            "max_tokens": cfg.max_tokens,
+            "timeout": cfg.timeout_seconds,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+        }
+        with client.chat.completions.create(**kwargs) as stream:
+            for chunk in stream:
+                # OpenAI SDK 1.x returns ChatCompletionChunk objects.
+                try:
+                    delta = chunk.choices[0].delta.content
+                except (AttributeError, IndexError):
+                    delta = None
+                if delta:
+                    yield delta
+    except AppError:
+        raise
+    except Exception as exc:
+        message = _humanize_llm_error(exc, cfg)
+        log.error(
+            "ai.llm_stream_failed",
+            error=str(exc),
+            error_type=exc.__class__.__name__,
+            model=cfg.model,
+            provider=cfg.provider,
+            source=cfg.source,
+        )
+        raise AppError(
+            message,
+            code="ai_provider_error",
+            status_code=502,
+            extra={"provider": cfg.provider, "model": cfg.model, "source": cfg.source},
+        ) from exc
+
+
+def _humanize_llm_error(exc: Exception, cfg: _LlmConfig) -> str:
+    """Best-effort translation of provider exceptions into actionable messages."""
+    name = exc.__class__.__name__
+    raw = str(exc)
+    lowered = raw.lower()
+    if "authentication" in lowered or "invalid_api_key" in lowered or name == "AuthenticationError":
+        return (
+            f"AI provider rejected the API key (configured via {cfg.source}). "
+            "Open Settings → LLM and rotate the key, or update OPENAI_API_KEY."
+        )
+    if "rate limit" in lowered or name == "RateLimitError":
+        return "AI provider rate limit reached. Please wait a moment and retry."
+    if "timeout" in lowered or name in {"APITimeoutError", "Timeout"}:
+        return f"AI provider timed out after {cfg.timeout_seconds}s. Try a shorter prompt or increase the timeout in Settings → LLM."
+    if "not found" in lowered and "model" in lowered:
+        return f"Model '{cfg.model}' is not available for this account. Pick a different model in Settings → LLM."
+    if "connection" in lowered or name in {"APIConnectionError", "ConnectionError"}:
+        return "Could not reach the AI provider. Check the base URL / network and try again."
+    return f"AI call failed ({name}). See server logs for details."
 
 
 def _safe_json(raw: str) -> Any:
@@ -73,18 +304,19 @@ def _safe_json(raw: str) -> Any:
         raise
 
 
-# ---------- Public API ----------
+# ---------- Public API -------------------------------------------------------
 
 def generate_test_cases(
     session: Session, requirement: str, count: int = 5,
     project_id: str | None = None, user_id: str | None = None,
 ) -> dict[str, Any]:
     prompt = GENERATE_TEST_CASES.format(requirement=requirement, count=count)
-    if not _has_openai():
+    cfg = _resolve_config(session)
+    if cfg is None:
         items = _fallback_test_cases(requirement, count)
         return {"items": items, "raw": None, "used_fallback": True}
-    raw = _call_openai(prompt)
-    _record(session, PromptType.TEST_CASE_GENERATION, prompt, raw, settings.OPENAI_MODEL, project_id, user_id)
+    raw = _call_llm(cfg, prompt)
+    _record(session, PromptType.TEST_CASE_GENERATION, prompt, raw, cfg.model, project_id, user_id)
     try:
         data = _safe_json(raw)
         items = data if isinstance(data, list) else data.get("items") or data.get("test_cases") or []
@@ -100,10 +332,11 @@ def generate_sql_from_mapping(
     user_id: str | None = None,
 ) -> str:
     prompt = GENERATE_SQL_FROM_STM.format(mapping_json=json.dumps(mapping_json, indent=2))
-    if not _has_openai():
+    cfg = _resolve_config(session)
+    if cfg is None:
         return render_validation_sql(mapping_json)
-    raw = _call_openai(prompt)
-    _record(session, PromptType.SQL_GENERATION, prompt, raw, settings.OPENAI_MODEL, project_id, user_id)
+    raw = _call_llm(cfg, prompt)
+    _record(session, PromptType.SQL_GENERATION, prompt, raw, cfg.model, project_id, user_id)
     cleaned = re.sub(r"^```(?:sql)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
     return cleaned or render_validation_sql(mapping_json)
 
@@ -112,7 +345,8 @@ def analyze_failure(
     session: Session, test_name: str, error_message: str, logs: str | None = None,
 ) -> dict[str, Any]:
     prompt = ANALYZE_FAILURE.format(test_name=test_name, error_message=error_message, logs=logs or "")
-    if not _has_openai():
+    cfg = _resolve_config(session)
+    if cfg is None:
         return {
             "summary": f"Test '{test_name}' failed.",
             "likely_root_cause": "Unable to determine without AI; review logs and assertion mismatch.",
@@ -120,8 +354,8 @@ def analyze_failure(
             "is_flaky": False,
             "raw": None,
         }
-    raw = _call_openai(prompt, json_mode=True)
-    _record(session, PromptType.FAILURE_ANALYSIS, prompt, raw, settings.OPENAI_MODEL)
+    raw = _call_llm(cfg, prompt, json_mode=True)
+    _record(session, PromptType.FAILURE_ANALYSIS, prompt, raw, cfg.model)
     try:
         data = _safe_json(raw)
         return {
@@ -138,11 +372,12 @@ def analyze_failure(
 
 def generate_no_code_flow(session: Session, scenario: str) -> dict[str, Any]:
     prompt = GENERATE_NO_CODE_FLOW.format(scenario=scenario)
-    if not _has_openai():
+    cfg = _resolve_config(session)
+    if cfg is None:
         flow = _fallback_flow(scenario)
         return {"flow_json": flow, "used_fallback": True}
-    raw = _call_openai(prompt, json_mode=True)
-    _record(session, PromptType.FLOW_GENERATION, prompt, raw, settings.OPENAI_MODEL)
+    raw = _call_llm(cfg, prompt, json_mode=True)
+    _record(session, PromptType.FLOW_GENERATION, prompt, raw, cfg.model)
     try:
         return {"flow_json": _safe_json(raw), "used_fallback": False}
     except Exception:
@@ -172,11 +407,12 @@ def generate_stm_scenarios(
         source_tables=", ".join(source_tables or []) or "(none)",
         count=count,
     )
-    if not _has_openai():
+    cfg = _resolve_config(session)
+    if cfg is None:
         return _fallback_stm_scenarios(scenario, target_table, count), True
-    raw = _call_openai(prompt, json_mode=True)
+    raw = _call_llm(cfg, prompt, json_mode=True)
     _record(
-        session, PromptType.SQL_GENERATION, prompt, raw, settings.OPENAI_MODEL,
+        session, PromptType.SQL_GENERATION, prompt, raw, cfg.model,
         project_id, user_id,
     )
     try:
@@ -197,16 +433,122 @@ def generate_stm_scenarios(
 
 def suggest_edge_cases(session: Session, requirement: str) -> dict[str, Any]:
     prompt = SUGGEST_EDGE_CASES.format(requirement=requirement)
-    if not _has_openai():
+    cfg = _resolve_config(session)
+    if cfg is None:
         return {"edge_cases": _fallback_edge_cases(requirement), "used_fallback": True}
-    raw = _call_openai(prompt)
-    _record(session, PromptType.TEST_CASE_GENERATION, prompt, raw, settings.OPENAI_MODEL)
+    raw = _call_llm(cfg, prompt)
+    _record(session, PromptType.TEST_CASE_GENERATION, prompt, raw, cfg.model)
     try:
         data = _safe_json(raw)
         return {"edge_cases": data if isinstance(data, list) else data.get("edge_cases", []),
                 "used_fallback": False}
     except Exception:
         return {"edge_cases": _fallback_edge_cases(requirement), "used_fallback": True}
+
+
+# ---------- Streaming generators ---------------------------------------------
+#
+# Streaming is implemented as **synchronous generators**. The realtime route
+# wraps the generator with ``starlette.concurrency.run_in_threadpool`` /
+# ``iterate_in_threadpool`` so we don't block the event loop. We emit three
+# event kinds the UI cares about:
+#
+#   * ``meta``     — config snapshot (provider/model/source) sent once.
+#   * ``token``    — raw text delta from the LLM.
+#   * ``parsed``   — once streaming completes, the *parsed* structured result
+#                    (so the UI can replace its in-progress preview with the
+#                    typed value used by Redux state).
+#   * ``done``     — terminal signal so the SSE consumer can close cleanly.
+#   * ``error``    — included as the last event when something blew up.
+
+
+def stream_test_cases(
+    session: Session, requirement: str, count: int = 5,
+    project_id: str | None = None, user_id: str | None = None,
+):
+    """Generator yielding ``(event_type, payload)`` tuples for SSE relay."""
+    cfg = _resolve_config(session)
+    if cfg is None:
+        items = _fallback_test_cases(requirement, count)
+        yield "meta", {"provider": None, "model": None, "source": None, "used_fallback": True}
+        yield "parsed", {"items": items, "used_fallback": True}
+        yield "done", {}
+        return
+
+    yield "meta", {
+        "provider": cfg.provider,
+        "model": cfg.model,
+        "source": cfg.source,
+        "used_fallback": False,
+    }
+
+    prompt = GENERATE_TEST_CASES.format(requirement=requirement, count=count)
+    buffer: list[str] = []
+    try:
+        for delta in _call_llm_stream(cfg, prompt):
+            buffer.append(delta)
+            yield "token", {"delta": delta}
+        raw = "".join(buffer)
+        _record(
+            session, PromptType.TEST_CASE_GENERATION, prompt, raw, cfg.model,
+            project_id, user_id,
+        )
+        try:
+            data = _safe_json(raw)
+            items = data if isinstance(data, list) else (
+                data.get("items") or data.get("test_cases") or []
+            )
+            yield "parsed", {"items": items, "used_fallback": False, "raw": raw}
+        except Exception:
+            yield "parsed", {
+                "items": _fallback_test_cases(requirement, count),
+                "used_fallback": True,
+                "raw": raw,
+            }
+        yield "done", {}
+    except AppError as exc:
+        yield "error", {"message": str(exc), "code": exc.code}
+        yield "done", {}
+
+
+def stream_edge_cases(session: Session, requirement: str):
+    """Generator yielding ``(event_type, payload)`` tuples for SSE relay."""
+    cfg = _resolve_config(session)
+    if cfg is None:
+        yield "meta", {"provider": None, "model": None, "source": None, "used_fallback": True}
+        yield "parsed", {"edge_cases": _fallback_edge_cases(requirement), "used_fallback": True}
+        yield "done", {}
+        return
+
+    yield "meta", {
+        "provider": cfg.provider,
+        "model": cfg.model,
+        "source": cfg.source,
+        "used_fallback": False,
+    }
+
+    prompt = SUGGEST_EDGE_CASES.format(requirement=requirement)
+    buffer: list[str] = []
+    try:
+        for delta in _call_llm_stream(cfg, prompt):
+            buffer.append(delta)
+            yield "token", {"delta": delta}
+        raw = "".join(buffer)
+        _record(session, PromptType.TEST_CASE_GENERATION, prompt, raw, cfg.model)
+        try:
+            data = _safe_json(raw)
+            edge_cases = data if isinstance(data, list) else data.get("edge_cases", [])
+            yield "parsed", {"edge_cases": edge_cases, "used_fallback": False, "raw": raw}
+        except Exception:
+            yield "parsed", {
+                "edge_cases": _fallback_edge_cases(requirement),
+                "used_fallback": True,
+                "raw": raw,
+            }
+        yield "done", {}
+    except AppError as exc:
+        yield "error", {"message": str(exc), "code": exc.code}
+        yield "done", {}
 
 
 # ---------- Deterministic fallbacks ----------

@@ -2,6 +2,8 @@ import {
   ApiOutlined,
   ClockCircleOutlined,
   DatabaseOutlined,
+  FullscreenExitOutlined,
+  FullscreenOutlined,
   KeyOutlined,
   LinkOutlined,
   NumberOutlined,
@@ -27,11 +29,16 @@ import {
   Row,
   Skeleton,
   Space,
+  Spin,
+  Tabs,
   Tag,
+  Tree,
   Typography,
 } from "antd";
+import type { DataNode } from "antd/es/tree";
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import StatCard from "@components/common/StatCard";
 import { JsonView } from "@components/editors";
@@ -52,6 +59,8 @@ import {
 } from "@services/metadataApi";
 import { tokens } from "@theme/tokens";
 import { getApiErrorMessage } from "@utils/apiErrors";
+
+import { LiveSchemaExplorer } from "./LiveSchemaExplorer";
 
 const { Text, Paragraph } = Typography;
 
@@ -85,6 +94,7 @@ const toNullPercent = (value: number | string | null | undefined): number => {
 export const MetadataExplorerPage = () => {
   const { project, projectId } = useSelectedProject();
   const { message } = App.useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [sources, setSources] = useState<DataSource[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
@@ -110,24 +120,22 @@ export const MetadataExplorerPage = () => {
   }>({ open: false, columns: [], loading: false });
   const [selectedColumn, setSelectedColumn] = useState<MetadataColumn | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [exploreTab, setExploreTab] = useState<string>("list");
+  const [metadataFullscreen, setMetadataFullscreen] = useState(false);
+  const [schemaTreeData, setSchemaTreeData] = useState<DataNode[]>([]);
+  const [schemaTreeLoading, setSchemaTreeLoading] = useState(false);
 
-  const loadSources = useCallback(
-    async (id: string) => {
-      setSourcesLoading(true);
-      try {
-        const data = await dataSourcesApi.list(id);
-        setSources(data);
-        if (data.length > 0 && !selectedSourceId) {
-          setSelectedSourceId(data[0].id);
-        }
-      } catch (err) {
-        message.error(getApiErrorMessage(err, "Failed to load data sources"));
-      } finally {
-        setSourcesLoading(false);
-      }
-    },
-    [message, selectedSourceId],
-  );
+  const loadSources = useCallback(async (id: string) => {
+    setSourcesLoading(true);
+    try {
+      const data = await dataSourcesApi.list(id);
+      setSources(data);
+    } catch (err) {
+      message.error(getApiErrorMessage(err, "Failed to load data sources"));
+    } finally {
+      setSourcesLoading(false);
+    }
+  }, [message]);
 
   const loadTables = useCallback(
     async (id: string) => {
@@ -174,6 +182,19 @@ export const MetadataExplorerPage = () => {
     [],
   );
 
+  /** Same schema+table can appear more than once if metadata was scanned multiple times. */
+  const tablesDeduped = useMemo(() => {
+    const seen = new Set<string>();
+    const out: MetadataTable[] = [];
+    for (const t of tables) {
+      const k = `${t.schema_name ?? ""}\u0000${t.table_name}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(t);
+    }
+    return out;
+  }, [tables]);
+
   useEffect(() => {
     if (projectId) {
       setSelectedSourceId(null);
@@ -187,7 +208,64 @@ export const MetadataExplorerPage = () => {
   }, [projectId, loadSources]);
 
   useEffect(() => {
+    if (!metadataFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMetadataFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [metadataFullscreen]);
+
+  useEffect(() => {
+    if (!metadataFullscreen) return;
+    const before = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = before;
+    };
+  }, [metadataFullscreen]);
+
+  /**
+   * Pick which connection is active: `?dataSource=<uuid>` (from Settings → Connections) wins,
+   * otherwise keep a valid previous selection, otherwise the first source.
+   */
+  useEffect(() => {
+    if (sources.length === 0) {
+      setSelectedSourceId(null);
+      return;
+    }
+    const fromUrl = searchParams.get("dataSource");
+    if (fromUrl) {
+      if (sources.some((s) => s.id === fromUrl)) {
+        setSelectedSourceId(fromUrl);
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("dataSource");
+            return next;
+          },
+          { replace: true },
+        );
+        return;
+      }
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("dataSource");
+          return next;
+        },
+        { replace: true },
+      );
+    }
+    setSelectedSourceId((prev) => {
+      if (prev && sources.some((s) => s.id === prev)) return prev;
+      return sources[0].id;
+    });
+  }, [sources, searchParams, setSearchParams]);
+
+  useEffect(() => {
     if (selectedSourceId) {
+      setExploreTab("list");
       void loadTables(selectedSourceId);
       void loadSummary(selectedSourceId);
       setGlobalQuery("");
@@ -203,6 +281,56 @@ export const MetadataExplorerPage = () => {
       runGlobalSearch(selectedSourceId, globalQuery);
     }
   }, [selectedSourceId, globalQuery, runGlobalSearch]);
+
+  useEffect(() => {
+    if (exploreTab !== "tree" || !selectedSourceId || tablesDeduped.length === 0) {
+      setSchemaTreeData([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setSchemaTreeLoading(true);
+      try {
+        const cap = Math.min(80, tablesDeduped.length);
+        const slice = tablesDeduped.slice(0, cap);
+        const colRows = await Promise.all(slice.map((t) => metadataApi.listColumns(t.id)));
+        if (cancelled) return;
+        setSchemaTreeData(
+          slice.map((t, i) => ({
+            key: `t-${t.id}`,
+            title: (
+              <Space>
+                <TableOutlined />
+                <Text strong>
+                  {t.schema_name ? `${t.schema_name}.` : ""}
+                  {t.table_name}
+                </Text>
+              </Space>
+            ),
+            children: colRows[i].map((c) => ({
+              key: `c-${c.id}`,
+              title: (
+                <Space size={4} wrap>
+                  <Text className="text-sm">{c.column_name}</Text>
+                  {c.data_type && <Tag className="!text-xs">{String(c.data_type)}</Tag>}
+                  {c.is_primary_key && <Tag color="gold">PK</Tag>}
+                  {c.is_foreign_key && <Tag color="purple">FK</Tag>}
+                </Space>
+              ),
+              isLeaf: true,
+            })),
+          })),
+        );
+      } catch {
+        if (!cancelled) setSchemaTreeData([]);
+      } finally {
+        if (!cancelled) setSchemaTreeLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [exploreTab, selectedSourceId, tablesDeduped]);
 
   const onScanMetadata = async () => {
     if (!selectedSourceId) return;
@@ -307,14 +435,14 @@ export const MetadataExplorerPage = () => {
   };
 
   const filteredTables = useMemo(() => {
-    if (!tableQuery.trim()) return tables;
+    if (!tableQuery.trim()) return tablesDeduped;
     const needle = tableQuery.trim().toLowerCase();
-    return tables.filter((t) =>
+    return tablesDeduped.filter((t) =>
       [t.table_name, t.schema_name, t.table_type]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(needle)),
     );
-  }, [tables, tableQuery]);
+  }, [tablesDeduped, tableQuery]);
 
   const tableColumns: ColumnsType<MetadataTable> = [
     {
@@ -572,8 +700,44 @@ export const MetadataExplorerPage = () => {
         </>
       )}
 
-      <Row gutter={[16, 16]} align="top">
-        <Col xs={24} md={8} lg={6}>
+      <div
+        className={
+          metadataFullscreen
+            ? "fixed inset-0 z-[1000] flex flex-col gap-0 overflow-y-auto overflow-x-hidden bg-[var(--color-bg)] p-0 shadow-2xl md:gap-2 md:p-4"
+            : undefined
+        }
+      >
+        {metadataFullscreen && (
+          <div className="sticky top-0 z-[1] flex shrink-0 items-center justify-between gap-2 border-0 border-b border-solid border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 md:px-0">
+            <Space wrap>
+              <TableOutlined style={{ color: tokens.color.primary }} />
+              <Text strong>Metadata preview</Text>
+              {selectedSource && (
+                <Tag color={SOURCE_TYPE_COLOR[selectedSource.source_type] || "default"}>
+                  {selectedSource.name}
+                </Tag>
+              )}
+            </Space>
+            <Space size="small" wrap>
+              <Text type="secondary" className="!hidden sm:!inline text-xs">
+                Press Esc to exit
+              </Text>
+              <Button
+                type="primary"
+                icon={<FullscreenExitOutlined />}
+                onClick={() => setMetadataFullscreen(false)}
+              >
+                Exit
+              </Button>
+            </Space>
+          </div>
+        )}
+        <Row
+          gutter={[16, 16]}
+          align="top"
+          className={metadataFullscreen ? "min-h-0 flex-1" : undefined}
+        >
+          <Col xs={24} md={8} lg={6} className={metadataFullscreen ? "flex min-h-0 flex-col" : undefined}>
           <Card
             title={<Space><DatabaseOutlined />Connections</Space>}
             loading={sourcesLoading && sources.length === 0}
@@ -626,10 +790,20 @@ export const MetadataExplorerPage = () => {
               />
             )}
           </Card>
-        </Col>
+          </Col>
 
-        <Col xs={24} md={16} lg={18}>
+          <Col
+            xs={24}
+            md={16}
+            lg={18}
+            className={metadataFullscreen ? "flex min-h-0 flex-1 flex-col" : undefined}
+          >
           <Card
+            className={
+              metadataFullscreen
+                ? "flex min-h-0 flex-1 flex-col [&_.ant-card-body]:flex [&_.ant-card-body]:min-h-0 [&_.ant-card-body]:flex-1 [&_.ant-card-body]:flex-col"
+                : undefined
+            }
             title={
               <Space wrap>
                 <TableOutlined />
@@ -649,6 +823,16 @@ export const MetadataExplorerPage = () => {
                   onChange={(e) => setTableQuery(e.target.value)}
                   style={{ width: 220 }}
                 />
+                {selectedSourceId && (
+                  <Button
+                    icon={
+                      metadataFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />
+                    }
+                    onClick={() => setMetadataFullscreen((v) => !v)}
+                  >
+                    {metadataFullscreen ? "Exit full screen" : "Full screen"}
+                  </Button>
+                )}
                 <Button
                   icon={<SyncOutlined />}
                   loading={scanning}
@@ -663,18 +847,113 @@ export const MetadataExplorerPage = () => {
             {!selectedSourceId ? (
               <Empty description="Select a connection to browse its tables." />
             ) : (
-              <DataTable<MetadataTable>
-                data={filteredTables}
-                columns={tableColumns}
-                rowKey="id"
-                loading={tablesLoading}
-                emptyDescription="No tables yet — run a metadata scan to populate the catalog."
-                pagination={{ pageSize: 20, showSizeChanger: true }}
+              <Tabs
+                activeKey={exploreTab}
+                onChange={setExploreTab}
+                className={
+                  metadataFullscreen
+                    ? "metadata-explorer-fullscreen-tabs flex min-h-0 flex-1 flex-col [&_.ant-tabs-content-outer]:min-h-0 [&_.ant-tabs-content-outer]:flex-1"
+                    : undefined
+                }
+                items={[
+                  {
+                    key: "list",
+                    label: "Table list",
+                    children: (
+                      <div
+                        className={metadataFullscreen ? "max-h-[min(80vh,920px)] overflow-auto" : undefined}
+                      >
+                        <DataTable<MetadataTable>
+                          data={filteredTables}
+                          columns={tableColumns}
+                          rowKey="id"
+                          loading={tablesLoading}
+                          emptyDescription="No tables yet — run a metadata scan to populate the catalog."
+                          pagination={{ pageSize: 20, showSizeChanger: true }}
+                        />
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "tree",
+                    label: "Tree (schema → table → column)",
+                    children: schemaTreeLoading ? (
+                      <div className="flex justify-center py-12">
+                        <Spin size="large" />
+                      </div>
+                    ) : schemaTreeData.length === 0 ? (
+                      <Empty description="No data to show. Run Scan, or switch to Table list." />
+                    ) : (
+                      <div
+                        className={`overflow-auto rounded-lg border border-solid border-[var(--color-border)] p-2 ${
+                          metadataFullscreen
+                            ? "max-h-[min(80vh,960px)] min-h-[min(50vh,480px)]"
+                            : "max-h-[min(70vh,720px)]"
+                        }`}
+                      >
+                        <Tree
+                          showLine
+                          defaultExpandAll
+                          treeData={schemaTreeData}
+                        />
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "live",
+                    label: "Live tree & ER",
+                    children: selectedSource ? (
+                      <LiveSchemaExplorer
+                        dataSource={selectedSource}
+                        viewMode={metadataFullscreen ? "expanded" : "default"}
+                      />
+                    ) : null,
+                  },
+                  {
+                    key: "map",
+                    label: "Schema map",
+                    children: (
+                      <div
+                        className={metadataFullscreen ? "max-h-[min(82vh,920px)] overflow-y-auto" : undefined}
+                      >
+                        <div className="text-secondary mb-3 text-sm">
+                          Entity-style grid: each box is a table (like an ER sheet). Click a card to open column details.
+                        </div>
+                        <Row gutter={[12, 12]}>
+                          {filteredTables.map((t) => (
+                            <Col xs={24} sm={12} lg={8} key={t.id}>
+                              <Card
+                                size="small"
+                                hoverable
+                                onClick={() => void openTable(t)}
+                                title={
+                                  <Space direction="vertical" size={0}>
+                                    <Text strong>{t.table_name}</Text>
+                                    {t.schema_name && (
+                                      <Text type="secondary" className="!text-xs">
+                                        {t.schema_name}
+                                      </Text>
+                                    )}
+                                  </Space>
+                                }
+                              >
+                                <Text type="secondary" className="!text-xs">
+                                  {t.table_type || "TABLE"} · rows {formatNumber(t.row_count)}
+                                </Text>
+                              </Card>
+                            </Col>
+                          ))}
+                        </Row>
+                      </div>
+                    ),
+                  },
+                ]}
               />
             )}
           </Card>
-        </Col>
-      </Row>
+          </Col>
+        </Row>
+      </div>
 
       <Drawer
         title={
@@ -692,7 +971,8 @@ export const MetadataExplorerPage = () => {
         }
         open={drawer.open}
         onClose={() => setDrawer({ open: false, columns: [], loading: false })}
-        width={780}
+        width={metadataFullscreen ? "min(96vw, 1200px)" : 780}
+        zIndex={metadataFullscreen ? 1100 : undefined}
         destroyOnHidden
       >
         {drawer.table && (
@@ -774,7 +1054,8 @@ export const MetadataExplorerPage = () => {
         }
         open={!!selectedColumn}
         onClose={() => setSelectedColumn(null)}
-        width={520}
+        width={metadataFullscreen ? "min(90vw, 720px)" : 520}
+        zIndex={metadataFullscreen ? 1100 : undefined}
         destroyOnHidden
       >
         {selectedColumn ? (

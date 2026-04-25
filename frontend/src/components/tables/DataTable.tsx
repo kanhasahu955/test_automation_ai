@@ -77,19 +77,12 @@ export function DataTable<T extends object>({
     <div>
       {showHeader && (
         <div
-          style={{
-            display: "flex",
-            gap: 12,
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 12,
-            flexWrap: "wrap",
-          }}
+          className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         >
-          <Space size={8} wrap>
+          <Space size={8} wrap className="min-w-0">
             {toolbar}
           </Space>
-          <Space size={8}>
+          <Space size={8} wrap className="w-full sm:w-auto">
             {searchable && (
               <Input
                 allowClear
@@ -98,7 +91,7 @@ export function DataTable<T extends object>({
                 prefix={<SearchOutlined style={{ color: tokens.color.textFaint }} />}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                style={{ width: 240 }}
+                className="w-full min-w-0 sm:!w-60"
               />
             )}
             {onRefresh && (
@@ -110,11 +103,13 @@ export function DataTable<T extends object>({
         </div>
       )}
 
+      <div className="w-full min-w-0 overflow-x-auto">
       <Table<T>
         rowKey={rowKey as TableProps<T>["rowKey"]}
         size={size}
         dataSource={filtered}
         columns={columns}
+        scroll={{ x: "max-content" }}
         pagination={
           pagination === false
             ? false
@@ -136,6 +131,7 @@ export function DataTable<T extends object>({
         }}
         {...rest}
       />
+      </div>
     </div>
   );
 }

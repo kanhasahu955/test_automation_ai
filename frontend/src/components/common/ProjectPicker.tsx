@@ -31,6 +31,7 @@ export const ProjectPicker = () => {
 
   return (
     <Select
+      className="w-full min-w-0 !max-w-full sm:min-w-[200px] md:min-w-[220px]"
       value={selected?.id}
       onChange={(value) => {
         const project = items.find((p) => p.id === value) || null;
@@ -38,7 +39,6 @@ export const ProjectPicker = () => {
       }}
       options={options}
       placeholder="Select project"
-      style={{ minWidth: 220 }}
       loading={loading}
       suffixIcon={<ProjectOutlined />}
       notFoundContent={loading ? "Loading..." : "No projects yet"}

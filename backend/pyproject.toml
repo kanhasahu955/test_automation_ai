@@ -19,6 +19,7 @@ dependencies = [
   "sqlmodel==0.0.22",
   "sqlalchemy==2.0.36",
   "pymysql==1.1.1",
+  "psycopg2-binary>=2.9.9,<3",
   "cryptography==43.0.3",
   "alembic==1.13.3",
   # ---- Auth ----
@@ -29,6 +30,12 @@ dependencies = [
   "redis==5.2.0",
   "celery==5.4.0",
   "flower==2.0.1",
+  # ---- Realtime / sockets ----
+  # python-socketio mounts a Socket.IO server alongside FastAPI on the same
+  # ASGI port. We use it for: dashboard/executions/ops push updates (replaces
+  # 5-15s polling) and token-by-token AI streaming. Engine.IO falls back to
+  # long-polling when WebSocket is blocked, which matters behind corp proxies.
+  "python-socketio[asyncio_client]>=5.11.4,<6",
   # ---- HTTP / AI ----
   "httpx==0.27.2",
   "openai==1.54.3",

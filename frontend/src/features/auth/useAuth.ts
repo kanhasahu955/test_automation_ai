@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAppDispatch, useAppSelector } from "@app/store";
 import { setTokens, setUnauthorizedHandler } from "@services/apiClient";
+import { connectSocket, disconnectSocket } from "@services/socket";
 
 import {
   loginRequest,
@@ -20,8 +21,17 @@ export const useAuth = () => {
     setTokens(auth.accessToken, auth.refreshToken);
     setUnauthorizedHandler(() => {
       dispatch(logoutSuccess());
+      disconnectSocket();
       navigate("/login");
     });
+    // Drive the realtime singleton from auth state: connect once we have a
+    // token, disconnect on logout. Re-renders with the same token are no-ops
+    // because ``connectSocket()`` is idempotent.
+    if (auth.accessToken) {
+      connectSocket();
+    } else {
+      disconnectSocket();
+    }
   }, [auth.accessToken, auth.refreshToken, dispatch, navigate]);
 
   const login = (email: string, password: string) =>

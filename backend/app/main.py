@@ -52,7 +52,30 @@ async def lifespan(app: FastAPI):
 
         ensure_admin_user(session)
 
+    # Bring up the Socket.IO bridge (Redis pub/sub -> sio.emit) and the ops
+    # snapshot broadcaster. Both are no-ops when no one is connected, so we
+    # always start them on boot.
+    from app.core.socketio import start_background_tasks
+
+    await start_background_tasks()
+
     yield
+
+    # Graceful shutdown: stop the bridge, then close the shared async Redis
+    # client used by ``core.realtime``.
+    try:
+        from app.core.socketio import stop_background_tasks
+
+        await stop_background_tasks()
+    except Exception:  # pragma: no cover - defensive
+        pass
+    try:
+        from app.core.realtime import aclose as realtime_aclose
+
+        await realtime_aclose()
+    except Exception:  # pragma: no cover - defensive
+        pass
+
     log.info("shutdown")
 
 
@@ -135,4 +158,12 @@ def create_app() -> FastAPI:
     return app
 
 
+# ``app`` stays the raw FastAPI application so existing imports (tests,
+# ``scripts/build_api_workbook.py`` for OpenAPI introspection) keep
+# working. ``asgi_app`` is the wrapped Socket.IO + FastAPI ASGI callable
+# that uvicorn / gunicorn must serve in production.
 app = create_app()
+
+from app.core.socketio import build_asgi_app  # noqa: E402  (avoid import cycle at top)
+
+asgi_app = build_asgi_app(app)

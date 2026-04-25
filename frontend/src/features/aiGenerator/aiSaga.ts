@@ -1,7 +1,13 @@
 import { call, put, takeLatest } from "redux-saga/effects";
 import type { PayloadAction } from "@reduxjs/toolkit";
 
-import { aiApi, type GeneratedTestCase } from "@services/aiApi";
+import {
+  aiApi,
+  type AiStatus,
+  type EdgeCasesResponse,
+  type GenerateFlowResponse,
+  type GenerateTestCasesResponse,
+} from "@services/aiApi";
 import { getApiErrorMessage as msg } from "@utils/apiErrors";
 
 import {
@@ -10,6 +16,8 @@ import {
   analyzeFailureSuccess,
   edgeCasesRequest,
   edgeCasesSuccess,
+  fetchAiStatusRequest,
+  fetchAiStatusSuccess,
   generateFlowRequest,
   generateFlowSuccess,
   generateTestCasesRequest,
@@ -17,16 +25,30 @@ import {
   type FailureAnalysis,
 } from "./aiSlice";
 
+function* fetchStatus() {
+  try {
+    const status: AiStatus = yield call(aiApi.status);
+    yield put(fetchAiStatusSuccess(status));
+  } catch {
+    // Status is best-effort — don't show a banner for it.
+  }
+}
+
 function* genTestCases(
   action: PayloadAction<{ requirement: string; count?: number }>,
 ) {
   try {
-    const resp: { items: GeneratedTestCase[] } = yield call(
+    const resp: GenerateTestCasesResponse = yield call(
       aiApi.generateTestCases,
       action.payload.requirement,
       action.payload.count ?? 5,
     );
-    yield put(generateTestCasesSuccess(resp.items || []));
+    yield put(
+      generateTestCasesSuccess({
+        items: resp.items || [],
+        usedFallback: !!resp.used_fallback,
+      }),
+    );
   } catch (err) {
     yield put(aiFailure(msg(err, "AI generation failed")));
   }
@@ -34,11 +56,16 @@ function* genTestCases(
 
 function* genFlow(action: PayloadAction<{ scenario: string }>) {
   try {
-    const resp: { flow_json: Record<string, unknown> } = yield call(
+    const resp: GenerateFlowResponse = yield call(
       aiApi.generateFlow,
       action.payload.scenario,
     );
-    yield put(generateFlowSuccess(resp.flow_json));
+    yield put(
+      generateFlowSuccess({
+        flow: resp.flow_json,
+        usedFallback: !!resp.used_fallback,
+      }),
+    );
   } catch (err) {
     yield put(aiFailure(msg(err, "AI flow generation failed")));
   }
@@ -62,17 +89,23 @@ function* analyzeFailure(
 
 function* edgeCases(action: PayloadAction<{ requirement: string }>) {
   try {
-    const resp: { edge_cases: string[] } = yield call(
+    const resp: EdgeCasesResponse = yield call(
       aiApi.edgeCases,
       action.payload.requirement,
     );
-    yield put(edgeCasesSuccess(resp.edge_cases || []));
+    yield put(
+      edgeCasesSuccess({
+        edgeCases: resp.edge_cases || [],
+        usedFallback: !!resp.used_fallback,
+      }),
+    );
   } catch (err) {
     yield put(aiFailure(msg(err, "Edge case suggestion failed")));
   }
 }
 
 export default function* aiSaga() {
+  yield takeLatest(fetchAiStatusRequest.type, fetchStatus);
   yield takeLatest(generateTestCasesRequest.type, genTestCases);
   yield takeLatest(generateFlowRequest.type, genFlow);
   yield takeLatest(analyzeFailureRequest.type, analyzeFailure);

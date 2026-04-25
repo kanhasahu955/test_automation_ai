@@ -41,6 +41,15 @@ export class UsersApiClient extends BaseApiClient {
     return this.put<User, UserUpdateInput>(`/${id}`, payload);
   }
 
+  /**
+   * Single-purpose role rotation. Backed by `PATCH /users/{id}/role`, which
+   * goes through the same safety guards as the generic update (can't strip
+   * the last admin, can't demote the bootstrap account).
+   */
+  updateRole(id: string, role: UserRole): Promise<User> {
+    return this.patch<User, { role: UserRole }>(`/${id}/role`, { role });
+  }
+
   remove(id: string): Promise<void> {
     return this.delete<void>(`/${id}`);
   }
@@ -53,5 +62,6 @@ export const usersApi = {
   get: (id: string) => client.getById(id),
   create: (payload: UserCreateInput) => client.create(payload),
   update: (id: string, payload: UserUpdateInput) => client.update(id, payload),
+  updateRole: (id: string, role: UserRole) => client.updateRole(id, role),
   remove: (id: string) => client.remove(id),
 };

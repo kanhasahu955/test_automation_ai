@@ -162,8 +162,8 @@ backend-install: ## Install backend deps from uv.lock (frozen)
 	cd $(BACKEND_DIR) && uv sync --frozen
 
 backend: api ## Alias for `api`
-api: ## Run FastAPI dev server (uvicorn --reload)
-	cd $(BACKEND_DIR) && uv run uvicorn app.main:app --reload --host $(HOST) --port $(BACKEND_PORT)
+api: ## Run FastAPI + Socket.IO dev server (uvicorn --reload)
+	cd $(BACKEND_DIR) && uv run uvicorn app.main:asgi_app --reload --host $(HOST) --port $(BACKEND_PORT)
 
 worker: ## Run Celery worker (all queues)
 	cd $(BACKEND_DIR) && uv run celery -A app.core.celery_app.celery_app worker -l info -Q $(WORKER_QUEUES)

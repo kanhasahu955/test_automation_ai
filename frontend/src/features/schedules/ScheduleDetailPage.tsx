@@ -312,6 +312,7 @@ export const ScheduleDetailPage = () => {
               loading={historyLoading}
               dataSource={history}
               columns={columns}
+              scroll={{ x: "max-content" }}
               pagination={{ pageSize: 20 }}
               locale={{ emptyText: "No runs yet — try the Run now button." }}
             />

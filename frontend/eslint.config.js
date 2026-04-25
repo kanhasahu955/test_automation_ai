@@ -44,6 +44,13 @@ export default [
         sessionStorage: "readonly",
         process: "readonly",
         __dirname: "readonly",
+        AbortController: "readonly",
+        AbortSignal: "readonly",
+        Response: "readonly",
+        Request: "readonly",
+        Headers: "readonly",
+        ReadableStream: "readonly",
+        WebSocket: "readonly",
       },
     },
     plugins: {

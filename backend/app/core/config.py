@@ -83,7 +83,12 @@ class Settings(BaseSettings):
     # ``_split_cors`` validator can accept the simple comma-separated form
     # (e.g. ``CORS_ORIGINS=http://a,http://b``) used in ``.env``.
     CORS_ORIGINS: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["http://localhost:3000", "http://localhost:5173"]
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
     )
 
     # ---- Security ----

@@ -1,4 +1,10 @@
-"""AI generator routes."""
+"""AI generator HTTP routes.
+
+Token-by-token streaming for the AI Studio is delivered over Socket.IO
+(``ai:generate-test-cases`` / ``ai:suggest-edge-cases`` events handled in
+``app.core.socketio``) — these REST endpoints are kept for one-shot
+non-streaming calls and for clients that don't speak Socket.IO.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -8,6 +14,7 @@ from app.core.database import get_session
 from app.core.permissions import get_current_user
 from app.modules.ai_generator import service
 from app.modules.ai_generator.schemas import (
+    AiStatusResponse,
     AnalyzeFailureRequest,
     AnalyzeFailureResponse,
     EdgeCasesRequest,
@@ -22,6 +29,15 @@ from app.modules.ai_generator.schemas import (
 from app.modules.users.models import User
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+@router.get("/status", response_model=AiStatusResponse)
+def ai_status(
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_user),
+):
+    """Whether the AI generator has a usable LLM configured right now."""
+    return AiStatusResponse(**service.get_status(session))
 
 
 @router.post("/generate-test-cases", response_model=GenerateTestCasesResponse)

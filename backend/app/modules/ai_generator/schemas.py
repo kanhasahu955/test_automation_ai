@@ -59,3 +59,25 @@ class EdgeCasesRequest(BaseModel):
 class EdgeCasesResponse(BaseModel):
     edge_cases: list[str]
     used_fallback: bool = False
+
+
+class AiStatusResponse(BaseModel):
+    """Whether the AI generator currently has a working LLM configured.
+
+    The frontend uses this to render a banner ("running on templates")
+    instead of leaving users to wonder why their generated test cases
+    look canned.
+    """
+
+    enabled: bool
+    """``True`` when an LLM is configured and would be called."""
+
+    provider: str | None = None
+    """e.g. ``OPENAI``, ``OLLAMA`` — ``None`` when disabled."""
+
+    model: str | None = None
+    source: str | None = None
+    """``"db"`` (Settings → LLM) or ``"env"`` (process environment)."""
+
+    reason: str | None = None
+    """Human-readable hint when ``enabled`` is False."""

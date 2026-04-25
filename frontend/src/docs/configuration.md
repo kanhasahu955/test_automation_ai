@@ -13,16 +13,20 @@ Precedence (first wins): `env var → .env → {APP_ENV}.yaml → base.yaml → 
 Pick the overlay by setting `APP_ENV`:
 
 ```bash
-APP_ENV=development uvicorn app.main:app --reload   # default
-APP_ENV=staging     uvicorn app.main:app
-APP_ENV=production  uvicorn app.main:app
+APP_ENV=development uvicorn app.main:asgi_app --reload   # default
+APP_ENV=staging     uvicorn app.main:asgi_app
+APP_ENV=production  uvicorn app.main:asgi_app
 APP_ENV=test        pytest
 ```
+
+> `asgi_app` wraps the FastAPI app with Socket.IO middleware so HTTP and
+> WebSocket share the same port. Tests still import `app` from `app.main`
+> directly — that's the raw FastAPI symbol, used by `TestClient`.
 
 Override the config directory entirely (e.g. for tests or CI):
 
 ```bash
-QF_CONFIG_DIR=/etc/qualityforge/config uvicorn app.main:app
+QF_CONFIG_DIR=/etc/qualityforge/config uvicorn app.main:asgi_app
 ```
 
 ## YAML key map

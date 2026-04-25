@@ -1,7 +1,7 @@
 import { AlertOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Button, Card, Space, Statistic, Table, Tag, Tooltip, Typography } from "antd";
+import { Button, Card, Col, Row, Space, Statistic, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 import PageHeader from "@components/common/PageHeader";
@@ -10,14 +10,14 @@ import SelectProjectHint from "@components/common/SelectProjectHint";
 import { ROUTES } from "@constants/routes";
 import { useAppDispatch, useAppSelector } from "@app/store";
 import { fetchRegressionsRequest } from "@features/reports/reportsSlice";
+import useSocketEvent from "@hooks/useSocketEvent";
+import useSocketRoom from "@hooks/useSocketRoom";
 import { useSelectedProject } from "@hooks/useSelectedProject";
 import { executionStatusColor, type ExecutionStatus } from "@utils/executionStatus";
 import { fetchRunsRequest, selectRun } from "./executionsSlice";
 import type { ExecutionRun } from "@services/executionApi";
 
 const { Text } = Typography;
-
-const POLL_MS = 5000;
 
 export const ExecutionsPage = () => {
   const dispatch = useAppDispatch();
@@ -26,20 +26,52 @@ export const ExecutionsPage = () => {
   const { runs, loading } = useAppSelector((s) => s.executions);
   const regressions = useAppSelector((s) => s.reports.regressions);
 
+  // Initial load on project change.
   useEffect(() => {
     if (!projectId) return;
     dispatch(fetchRunsRequest(projectId));
     dispatch(fetchRegressionsRequest({ projectId, limit: 50 }));
   }, [projectId, dispatch]);
 
-  useEffect(() => {
+  // Live updates via SSE: instead of polling every 5s, refetch whenever the
+  // server pushes a run-shape change. We split the refresh into two debounced
+  // tracks so a flurry of `run.result` events (one per assertion) collapses
+  // to a single refetch.
+  const runsTimerRef = useRef<number | null>(null);
+  const regsTimerRef = useRef<number | null>(null);
+
+  const scheduleRunsRefresh = useCallback(() => {
     if (!projectId) return;
-    const id = setInterval(() => {
+    if (runsTimerRef.current) window.clearTimeout(runsTimerRef.current);
+    runsTimerRef.current = window.setTimeout(() => {
       dispatch(fetchRunsRequest(projectId));
-      dispatch(fetchRegressionsRequest({ projectId, limit: 50 }));
-    }, POLL_MS);
-    return () => clearInterval(id);
+    }, 600);
   }, [projectId, dispatch]);
+
+  const scheduleRegressionsRefresh = useCallback(() => {
+    if (!projectId) return;
+    if (regsTimerRef.current) window.clearTimeout(regsTimerRef.current);
+    regsTimerRef.current = window.setTimeout(() => {
+      dispatch(fetchRegressionsRequest({ projectId, limit: 50 }));
+    }, 1500);
+  }, [projectId, dispatch]);
+
+  useEffect(
+    () => () => {
+      if (runsTimerRef.current) window.clearTimeout(runsTimerRef.current);
+      if (regsTimerRef.current) window.clearTimeout(regsTimerRef.current);
+    },
+    [],
+  );
+
+  // Live updates over Socket.IO. The backend re-emits the same event names
+  // (``run.created`` / ``run.updated`` / ``run.result`` / ``regressions.
+  // invalidated``) into the ``project:<id>`` room.
+  useSocketRoom(projectId ? { type: "project", id: projectId } : null);
+  useSocketEvent("run.created", scheduleRunsRefresh, !!projectId);
+  useSocketEvent("run.updated", scheduleRunsRefresh, !!projectId);
+  useSocketEvent("run.result", scheduleRunsRefresh, !!projectId);
+  useSocketEvent("regressions.invalidated", scheduleRegressionsRefresh, !!projectId);
 
   const regressionCountByRun = useMemo(() => {
     const map = new Map<string, number>();
@@ -131,36 +163,45 @@ export const ExecutionsPage = () => {
       {!hasProject && <SelectProjectHint message="Select a project to view executions." />}
 
       {hasProject && (
-        <Card style={{ marginBottom: 16 }}>
-          <Space size={48} wrap>
-            <Statistic title="Total runs" value={runs.length} />
-            <Statistic
-              title="Running now"
-              value={runningCount}
-              valueStyle={{ color: runningCount > 0 ? "#06b6d4" : undefined }}
-            />
-            <Statistic
-              title="Failed"
-              value={failedCount}
-              valueStyle={{ color: failedCount > 0 ? "#ef4444" : undefined }}
-            />
-            <Statistic
-              title="Regressions in latest run"
-              value={regressions.length}
-              prefix={regressions.length > 0 ? <AlertOutlined style={{ color: "#ef4444" }} /> : null}
-              valueStyle={{ color: regressions.length > 0 ? "#ef4444" : undefined }}
-            />
-          </Space>
+        <Card style={{ marginBottom: 16 }} styles={{ body: { padding: "12px 16px" } }}>
+          <Row gutter={[12, 16]}>
+            <Col xs={12} sm={6}>
+              <Statistic title="Total runs" value={runs.length} />
+            </Col>
+            <Col xs={12} sm={6}>
+              <Statistic
+                title="Running now"
+                value={runningCount}
+                valueStyle={{ color: runningCount > 0 ? "#06b6d4" : undefined }}
+              />
+            </Col>
+            <Col xs={12} sm={6}>
+              <Statistic
+                title="Failed"
+                value={failedCount}
+                valueStyle={{ color: failedCount > 0 ? "#ef4444" : undefined }}
+              />
+            </Col>
+            <Col xs={24} sm={6}>
+              <Statistic
+                title="Regressions in latest run"
+                value={regressions.length}
+                prefix={regressions.length > 0 ? <AlertOutlined style={{ color: "#ef4444" }} /> : null}
+                valueStyle={{ color: regressions.length > 0 ? "#ef4444" : undefined }}
+              />
+            </Col>
+          </Row>
         </Card>
       )}
 
-      <Card>
+      <Card className="overflow-x-auto">
         <Table<ExecutionRun>
           rowKey="id"
           dataSource={runs}
           columns={columns}
           size="middle"
           loading={loading && runs.length === 0}
+          scroll={{ x: "max-content" }}
           pagination={{ pageSize: 10, showSizeChanger: true }}
           onRow={(row) => ({
             onClick: () => {

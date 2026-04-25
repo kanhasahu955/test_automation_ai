@@ -330,7 +330,7 @@ uv sync                          # creates .venv from uv.lock
 
 # Three processes (in separate terminals or via tmux)
 uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:asgi_app --reload --host 0.0.0.0 --port 8000
 uv run celery -A app.core.celery_app.celery_app worker -l info -Q execution,ai,stm,profiling,metadata,default
 uv run celery -A app.core.celery_app.celery_app beat   -l info
 ```
@@ -697,6 +697,7 @@ Import both → select environment → run **Auth → Login** → every other re
 | `mysql` healthcheck flaps                                    | First boot needs ~20 s. `make logs svc=mysql` to confirm `ready for connections`.         |
 | Celery tasks stuck `PENDING`                                 | `make logs-worker`. Confirm worker subscribes to the right queues (see `WORKER_QUEUES` in Makefile). |
 | Frontend can't reach API in dev                              | Check `VITE_API_BASE_URL` and `VITE_API_PROXY` in `frontend/.env`; vite proxies `/api`.   |
+| Socket.IO never connects / **403** on `/socket.io`            | **Engine.IO CORS** is separate from FastAPI; a mismatch vs your browser URL (e.g. `127.0.0.1` vs `localhost`) can 403 the handshake. Non-`production` `APP_ENV` allows all origins in code; in **production** add every UI origin to `CORS_ORIGINS`. **Docker:** nginx must proxy `/socket.io` and use `Connection $connection_upgrade` (see `docker/nginx/nginx.conf`), not always `upgrade`. **Dev:** use `VITE_API_BASE_URL=/api/v1` + Vite proxy, or set `VITE_SOCKET_SAME_ORIGIN=true`. **Auth:** valid JWT required (login). |
 | `500 Internal Server Error` on token refresh                 | `JWT_SECRET` changed → existing refresh tokens are invalid. Logout / re-login.            |
 | `cryptography.fernet.InvalidKey`                             | `ENCRYPTION_KEY` must be a base64 Fernet key — regenerate (see env table above).          |
 | Make help lists empty section names                          | Pre-fixed: only target groups (`# ── … ──`) become headers; variable groups use `# -- … --`. |
@@ -720,5 +721,15 @@ Import both → select environment → run **Auth → Login** → every other re
 6. **MySQL credentials** — change `DB_PASSWORD` (and the `MYSQL_ROOT_PASSWORD` in `docker-compose.yml`) before deploying.
 
 ---
+
+## 15. Productive end-to-end run (checklist)
+
+Use this when you want a **usable product loop**, not just the dev shell:
+
+1. **Stack** — `make up` (or equivalent): API, MySQL, Redis, **Celery worker** (so executions and scheduled jobs run), and Nginx if you proxy the SPA.
+2. **Env** — `JWT_SECRET`, `DB_*`, `REDIS_URL`, `ENCRYPTION_KEY`, and `OPENAI_API_KEY` (if you use AI features) set in `.env` / compose; `VITE_API_BASE_URL` (or the Vite proxy) so the **frontend** hits `/api/v1` on the same host you serve.
+3. **First user** — register or bootstrap admin, then create a **project** and select it in the app shell; most modules are project-scoped.
+4. **UI surface** — Notifications, Audit logs, Quality monitoring, and Test suites are wired to the existing REST APIs; Test suites can **add cases**, **run** (creates an execution run), and link to **Executions**. Audit log UI requires **Admin**; suite mutations require **QA** roles; quality rule **writes** require **Admin, QA manager, or Data engineer** (per backend RBAC).
+5. **Health** — Use **Operations** and logs (`make logs`, `make logs-worker`) if runs stay `PENDING` or quality checks do not run.
 
 Run `make help` any time for the full list of targets — it's the canonical operations index.
