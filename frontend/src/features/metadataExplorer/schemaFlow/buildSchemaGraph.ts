@@ -124,7 +124,7 @@ export function buildSchemaGraph(
       source: DB_NODE_ID,
       target: id,
       targetHandle: "t-in",
-      style: { stroke: "var(--color-text-faint, #9ca3af)", strokeWidth: 2, strokeDasharray: "4 2" },
+      style: { stroke: "var(--color-text-faint, #9ca3af)", strokeWidth: 1, strokeDasharray: "3 2" },
     });
   });
 
@@ -145,7 +145,7 @@ export function buildSchemaGraph(
       /** Kept on edge for a11y / future hover labels — avoids label spaghetti on the canvas */
       data: { fk: `${r.constrained_column} → ${r.referred_column}` } as { fk: string },
       animated: false,
-      style: { stroke: tokens.color.primary, strokeWidth: 1.5, opacity: 0.85 },
+      style: { stroke: tokens.color.primary, strokeWidth: 1, opacity: 0.9 },
     });
   }
 
@@ -173,7 +173,7 @@ export function buildSchemaGraph(
           target: id,
           sourceHandle: "t-out",
           targetHandle: "c-in",
-          style: { stroke: "var(--color-text-faint, #9ca3af)", strokeWidth: 1.5 },
+          style: { stroke: "var(--color-text-faint, #9ca3af)", strokeWidth: 0.9 },
         });
       });
     }

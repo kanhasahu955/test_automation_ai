@@ -22,7 +22,7 @@ function ERFitView({ version }: { version: number }) {
   const { fitView } = useReactFlow();
   useEffect(() => {
     const t = window.setTimeout(
-      () => void fitView({ padding: 0.15, maxZoom: 1.2, duration: 220 }),
+      () => void fitView({ padding: 0.05, maxZoom: 1.95, minZoom: 0.04, duration: 220 }),
       60,
     );
     return () => window.clearTimeout(t);
@@ -39,9 +39,9 @@ function FocusSelection({ nodeId, version }: { nodeId: string | null; version: n
       if (n) {
         void fitView({
           nodes: [n],
-          padding: 0.32,
+          padding: 0.12,
           duration: 340,
-          maxZoom: 1.55,
+          maxZoom: 1.95,
           minZoom: 0.04,
         });
       }
@@ -130,7 +130,7 @@ export function SchemaFlowCanvas({
       <ReactFlow
         nodeTypes={schemaEntityNodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.2, maxZoom: 1.1 }}
+        fitViewOptions={{ padding: 0.05, maxZoom: 1.95, minZoom: 0.04 }}
         nodes={nState}
         edges={eState}
         onNodesChange={onNodesChange}
@@ -145,9 +145,9 @@ export function SchemaFlowCanvas({
         elementsSelectable
         proOptions={{ hideAttribution: true }}
         minZoom={0.05}
-        maxZoom={viewMode === "expanded" ? 2.5 : 2.2}
+        maxZoom={viewMode === "expanded" ? 2.75 : 2.5}
         defaultEdgeOptions={{
-          style: { strokeWidth: 2 },
+          style: { strokeWidth: 1 },
         }}
       >
         <Background />
